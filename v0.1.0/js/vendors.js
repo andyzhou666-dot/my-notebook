@@ -5,6 +5,8 @@ const vendors = (() => {
     let vendorsList = [];
     let selectedTagFilter = '';
     let searchQuery = '';
+    let currentShareVendor = null;   // 當前分享的廠商
+    let shareCanvasInstance = null;  // 當前生成的畫布實體
 
     // 相機串流與鏡頭狀態
     let streamInstance = null;
@@ -412,6 +414,9 @@ const vendors = (() => {
                                     <i class="fa-solid fa-image"></i> 名片相片
                                 </span>
                             ` : ''}
+                            <span class="vendor-has-card-badge" onclick="vendors.generateShareCard(${v.id})" style="cursor: pointer; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.25); color: var(--color-primary);" title="點擊產生名片分享拼圖">
+                                <i class="fa-solid fa-share-nodes"></i> 名片分享
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -509,6 +514,9 @@ const vendors = (() => {
                                     <i class="fa-solid fa-image"></i>
                                 </button>
                             ` : ''}
+                            <button class="btn btn-secondary btn-sm" onclick="vendors.generateShareCard(${v.id})" style="padding: 4px 8px; font-size: 0.8rem; height: auto; color: var(--color-primary);" title="分享名片">
+                                <i class="fa-solid fa-share-nodes"></i>
+                            </button>
                             <button class="btn btn-secondary btn-sm" onclick="vendors.openEditModal(${v.id})" style="padding: 4px 8px; font-size: 0.8rem; height: auto;" title="修改資料">
                                 <i class="fa-solid fa-pen-to-square"></i>
                             </button>
@@ -846,7 +854,7 @@ const vendors = (() => {
                 { key: 'brands',        header: '代理品牌',     width: 20 },
                 { key: 'otherContacts', header: '其他聯絡人',   width: 30 },
                 { key: 'visitCount',    header: '來訪次數',     width: 10 },
-                { key: 'lastVisitText', header: '最近來訪紀錄',  width: 25 },
+                { key: 'visitDetailsText', header: '所有來訪紀錄',  width: 30 },
                 { key: 'address',       header: '公司地址',     width: 35 },
                 { key: 'tags',          header: '標籤',       width: 18 },
                 { key: 'notes',         header: '詳細備註',     width: 30 },
@@ -911,11 +919,12 @@ const vendors = (() => {
                 // 處理拜訪紀錄
                 const visits = v.visits || [];
                 const visitCount = getUniqueVisitCount(visits);
-                let lastVisitText = '-';
+                let visitDetailsText = '-';
                 if (visitCount > 0) {
                     const sortedVisits = [...visits].sort((a, b) => b.date.localeCompare(a.date));
-                    const last = sortedVisits[0];
-                    lastVisitText = `[${last.date}] ${last.contactName}: ${last.purpose}`;
+                    visitDetailsText = sortedVisits.map(vt => 
+                        `[${vt.date}] ${vt.contactName}: ${vt.purpose}`
+                    ).join('\n');
                 }
 
                 const rowData = [
@@ -928,7 +937,7 @@ const vendors = (() => {
                     v.brands ? v.brands.join(', ') : '-',
                     otherContactsText || '-',
                     visitCount,
-                    lastVisitText,
+                    visitDetailsText,
                     v.address || '-',
                     v.tags ? v.tags.join(', ') : '-',
                     v.notes || '-',
@@ -1839,6 +1848,290 @@ const vendors = (() => {
         }
     };
 
+    /**
+     * 關閉分享名片 Modal
+     */
+    const closeShareModal = () => {
+        const modal = document.getElementById('vendor-share-modal');
+        if (!modal) return;
+        modal.querySelector('.modal').style.transform = 'scale(0.95)';
+        modal.classList.remove('active');
+        currentShareVendor = null;
+        shareCanvasInstance = null;
+    };
+
+    /**
+     * 下載分享名片圖片
+     */
+    const downloadShareCard = () => {
+        if (!shareCanvasInstance || !currentShareVendor) {
+            app.showToast('無法下載，圖片尚未生成完畢', 'warning');
+            return;
+        }
+
+        try {
+            const dataUrl = shareCanvasInstance.toDataURL('image/png');
+            const link = document.createElement('a');
+            const fileName = `${currentShareVendor.companyName || '廠商'}_名片分享拼圖.png`;
+            link.download = fileName;
+            link.href = dataUrl;
+            link.click();
+            app.showToast('圖片下載成功！', 'success');
+        } catch (err) {
+            console.error('Download card error:', err);
+            app.showToast('下載失敗，請嘗試手動長按圖片儲存', 'error');
+        }
+    };
+
+    /**
+     * 產生並渲染 HTML5 Canvas 拼圖分享名片
+     */
+    const generateShareCard = async (vendorId) => {
+        const vendor = vendorsList.find(v => v.id === vendorId);
+        if (!vendor) return;
+
+        currentShareVendor = vendor;
+
+        const modal = document.getElementById('vendor-share-modal');
+        const container = document.getElementById('vendor-share-canvas-container');
+        if (!modal || !container) return;
+
+        container.innerHTML = `
+            <div style="padding: 40px; text-align: center; color: var(--text-secondary);">
+                <i class="fa-solid fa-spinner fa-spin fa-2x" style="color: var(--color-primary);"></i>
+                <p style="margin-top: 12px; font-size: 0.85rem;">名片拼圖生成中...</p>
+            </div>
+        `;
+        modal.classList.add('active');
+        setTimeout(() => {
+            modal.querySelector('.modal').style.transform = 'scale(1)';
+        }, 10);
+
+        try {
+            // 創建離屏 Canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = 800;
+            canvas.height = 1000;
+            const ctx = canvas.getContext('2d');
+
+            // 1. 繪製背景：深藍紫色極光漸層
+            const grad = ctx.createLinearGradient(0, 0, 0, 1000);
+            grad.addColorStop(0, '#0f172a');
+            grad.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 800, 1000);
+
+            // 繪製背景微光光暈 (裝飾性)
+            ctx.beginPath();
+            ctx.arc(100, 150, 200, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(99, 102, 241, 0.08)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(700, 850, 250, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(20, 184, 166, 0.06)';
+            ctx.fill();
+
+            // 繪製邊框
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(20, 20, 760, 960);
+
+            // 2. 標頭文字
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+            ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+            ctx.fillText('MY NOTEBOOK • 廠商聯絡分享卡', 50, 60);
+
+            // 3. 繪製公司名稱
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 36px "Segoe UI", system-ui, sans-serif';
+            ctx.fillText(vendor.companyName, 50, 115);
+
+            // 橫線分割線
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(50, 140);
+            ctx.lineTo(750, 140);
+            ctx.stroke();
+
+            // 4. 聯絡人主體
+            const primaryContact = (vendor.contacts && vendor.contacts.find(c => c.isPrimary)) || {
+                name: vendor.contactName || '未指定聯絡人',
+                title: '代表',
+                phone: vendor.phone || '',
+                email: vendor.email || ''
+            };
+
+            ctx.fillStyle = '#818cf8'; // 亮紫色
+            ctx.font = 'bold 24px "Segoe UI", system-ui, sans-serif';
+            ctx.fillText(primaryContact.name, 50, 190);
+            
+            if (primaryContact.title) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+                ctx.font = '18px "Segoe UI", system-ui, sans-serif';
+                ctx.fillText(` (${primaryContact.title})`, 50 + ctx.measureText(primaryContact.name).width + 5, 190);
+            }
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = '18px "Segoe UI", system-ui, sans-serif';
+            let infoY = 230;
+
+            if (primaryContact.phone) {
+                ctx.fillText(`📞 電話: ${primaryContact.phone}`, 50, infoY);
+                infoY += 32;
+            }
+            if (primaryContact.email) {
+                ctx.fillText(`✉️ 信箱: ${primaryContact.email}`, 50, infoY);
+                infoY += 32;
+            }
+            if (vendor.address) {
+                ctx.fillText(`📍 地址: ${vendor.address}`, 50, infoY);
+                infoY += 32;
+            }
+
+            // 5. 繪製代理品牌及經營標籤
+            let tagX = 50;
+            let tagY = infoY + 12;
+            ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+            
+            const allBadges = [];
+            if (vendor.brands) vendor.brands.forEach(b => allBadges.push({ text: b, type: 'brand' }));
+            if (vendor.tags) vendor.tags.forEach(t => allBadges.push({ text: t, type: 'tag' }));
+
+            allBadges.slice(0, 10).forEach(badge => {
+                const badgeText = badge.type === 'brand' ? `🔧 ${badge.text}` : `#${badge.text}`;
+                const badgeWidth = ctx.measureText(badgeText).width + 20;
+
+                if (tagX + badgeWidth > 750) {
+                    tagX = 50;
+                    tagY += 34;
+                }
+
+                ctx.fillStyle = badge.type === 'brand' ? 'rgba(99, 102, 241, 0.18)' : 'rgba(20, 184, 166, 0.18)';
+                ctx.strokeStyle = badge.type === 'brand' ? 'rgba(99, 102, 241, 0.35)' : 'rgba(20, 184, 166, 0.35)';
+                ctx.lineWidth = 1;
+                
+                ctx.beginPath();
+                ctx.roundRect(tagX, tagY, badgeWidth, 24, 6);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = badge.type === 'brand' ? '#a5b4fc' : '#99f6e4';
+                ctx.fillText(badgeText, tagX + 10, tagY + 17);
+
+                tagX += badgeWidth + 8;
+            });
+
+            // 6. 繪製名片照片拼圖
+            const cardImages = [];
+            if (vendor.cardImage) cardImages.push(vendor.cardImage);
+            if (vendor.cardImages) {
+                vendor.cardImages.forEach(img => {
+                    if (img && img !== vendor.cardImage) cardImages.push(img);
+                });
+            }
+
+            const imgLoadPromises = cardImages.slice(0, 2).map(base64 => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = () => resolve(null);
+                    img.src = base64;
+                });
+            });
+
+            const loadedImages = await Promise.all(imgLoadPromises);
+            const activeImages = loadedImages.filter(img => img !== null);
+
+            // 卡片容器的外層卡槽
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(40, 520, 720, 420, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            if (activeImages.length === 1) {
+                // 單張名片：置中拉伸適配
+                const img = activeImages[0];
+                const maxW = 680;
+                const maxH = 380;
+                let w = img.width;
+                let h = img.height;
+                const ratio = Math.min(maxW / w, maxH / h);
+                w = w * ratio;
+                h = h * ratio;
+                const x = (800 - w) / 2;
+                const y = 540 + (380 - h) / 2;
+
+                ctx.drawImage(img, x, y, w, h);
+            } else if (activeImages.length >= 2) {
+                // 兩張名片：左右並排 (正面與背面)
+                const maxW = 320;
+                const maxH = 260;
+
+                // 左圖
+                const img1 = activeImages[0];
+                let w1 = img1.width;
+                let h1 = img1.height;
+                const ratio1 = Math.min(maxW / w1, maxH / h1);
+                w1 = w1 * ratio1;
+                h1 = h1 * ratio1;
+                const x1 = 60 + (320 - w1) / 2;
+                const y1 = 610 + (260 - h1) / 2;
+                ctx.drawImage(img1, x1, y1, w1, h1);
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+                ctx.font = 'bold 15px "Segoe UI", system-ui, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('📋 名片正面', 220, 570);
+
+                // 右圖
+                const img2 = activeImages[1];
+                let w2 = img2.width;
+                let h2 = img2.height;
+                const ratio2 = Math.min(maxW / w2, maxH / h2);
+                w2 = w2 * ratio2;
+                h2 = h2 * ratio2;
+                const x2 = 420 + (320 - w2) / 2;
+                const y2 = 610 + (260 - h2) / 2;
+                ctx.drawImage(img2, x2, y2, w2, h2);
+
+                ctx.fillText('📋 名片背面', 580, 570);
+                ctx.textAlign = 'left'; // 恢復靠左
+            } else {
+                // 無名片相片：繪製高質感數位排版裝飾圖
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.font = 'bold 96px "Font Awesome 6 Free"';
+                ctx.textAlign = 'center';
+                ctx.fillText('\uf2bb', 400, 710); // FontAwesome address-card
+                
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+                ctx.fillText('數位名片聯絡檔案', 400, 765);
+                ctx.textAlign = 'left';
+            }
+
+            shareCanvasInstance = canvas;
+
+            // 輸出至 Modal 供預覽
+            const previewImg = document.createElement('img');
+            previewImg.src = canvas.toDataURL('image/png');
+            previewImg.style.width = '100%';
+            previewImg.style.height = 'auto';
+            previewImg.style.borderRadius = 'var(--border-radius-sm)';
+            previewImg.style.display = 'block';
+
+            container.innerHTML = '';
+            container.appendChild(previewImg);
+        } catch (err) {
+            console.error('Canvas generate share card error:', err);
+            container.innerHTML = `<div style="padding:40px; text-align:center; color:var(--color-danger);"><i class="fa-solid fa-triangle-exclamation fa-2x"></i><p style="margin-top:10px;">名片生成失敗：${err.message}</p></div>`;
+        }
+    };
+
     // Helper: 避免 XSS
     const escapeHtml = (text) => {
         if (!text) return '';
@@ -1875,7 +2168,10 @@ const vendors = (() => {
         closeQuickVisitModal,
         addVisitRecord,
         deleteVisitRecord,
-        toggleCustomVisitContact
+        toggleCustomVisitContact,
+        generateShareCard,
+        closeShareModal,
+        downloadShareCard
     };
 })();
 

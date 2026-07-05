@@ -2388,6 +2388,15 @@ select, option {
     margin-bottom: 0;
 }
 
+.log-card .log-card-toggle-icon {
+    transform: rotate(0deg);
+    transition: transform 0.2s ease;
+}
+
+.log-card.collapsed .log-card-toggle-icon {
+    transform: rotate(-90deg) !important;
+}
+
 .log-card-header {
     display: flex;
     justify-content: space-between;
@@ -2581,6 +2590,203 @@ select, option {
 /* 折疊箭頭懸停與顏色 */
 .toggle-arrow:hover {
     color: var(--color-primary) !important;
+}
+
+/* -------------------------------------------------------------
+   DASHBOARD & STATS STYLES
+   ------------------------------------------------------------- */
+.dashboard-grid {
+    margin-top: 10px;
+}
+
+.dashboard-card {
+    transition: var(--transition-smooth);
+}
+
+.dashboard-card:hover {
+    border-color: var(--panel-border-glow);
+    box-shadow: var(--shadow-premium);
+}
+
+/* 為了讓熱力圖在手機上也能橫向滾動 */
+.heatmap-container::-webkit-scrollbar {
+    height: 6px;
+}
+
+.heatmap-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.heatmap-container::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.2);
+    border-radius: 3px;
+}
+
+.heatmap-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.4);
+}
+
+/* 知識庫 WYSIWYG 編輯器佔位文字 (Placeholder) 支援 */
+.kb-wysiwyg-editor:empty:before {
+    content: attr(placeholder);
+    color: var(--text-muted);
+    opacity: 0.6;
+    cursor: text;
+    pointer-events: none;
+}
+
+/* 修正富文本編輯器中列表的縮進與遮擋問題 */
+.kb-wysiwyg-editor ul,
+.kb-wysiwyg-editor ol {
+    padding-left: 28px !important;
+    margin: 8px 0 !important;
+    list-style-position: outside !important;
+}
+.kb-wysiwyg-editor ol {
+    list-style-type: decimal !important;
+}
+.kb-wysiwyg-editor ul {
+    list-style-type: disc !important;
+}
+.kb-wysiwyg-editor li {
+    display: list-item !important;
+    margin-bottom: 4px !important;
+}
+
+/* 知識庫編輯器工具列粘性定位 (Sticky) 與毛玻璃特效 */
+.editor-toolbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    background: var(--panel-bg) !important;
+    border: 1px solid var(--panel-border) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* -------------------------------------------------------------
+   PRINT MEDIA STYLES
+   ------------------------------------------------------------- */
+@media print {
+    /* 1. 隱藏與重置全局網頁 UI 元素 */
+    body, html {
+        background: #fff !important;
+        color: #000 !important;
+        font-family: "Segoe UI", system-ui, sans-serif !important;
+    }
+    
+    .sidebar,
+    .mobile-header,
+    .mobile-nav,
+    .header-actions,
+    .search-filter-bar,
+    .toast-container,
+    .modal-overlay,
+    .btn,
+    button,
+    #theme-toggle-btn {
+        display: none !important;
+    }
+    
+    /* 2. 調整主頁面容器的列印寬度 */
+    .app-container {
+        display: block !important;
+        min-height: 0 !important;
+    }
+    
+    main {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    
+    .tab-content {
+        display: none !important;
+    }
+    
+    .tab-content.active {
+        display: block !important;
+    }
+    
+    /* 3. 廠商卡片雙欄列印排版 */
+    .vendors-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 15px !important;
+    }
+    
+    .vendor-card {
+        background: #fff !important;
+        color: #000 !important;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        page-break-inside: avoid; /* 避免卡片在頁面接縫處被截斷 */
+    }
+    
+    .vendor-card-header {
+        border-bottom: 1px solid #eee !important;
+    }
+    
+    .vendor-company {
+        color: #000 !important;
+    }
+    
+    .vendor-info-item a {
+        color: #000 !important;
+        text-decoration: none !important;
+    }
+    
+    /* 4. 廠商條列式表格列印樣式 */
+    .vendor-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        background: #fff !important;
+        color: #000 !important;
+    }
+    
+    .vendor-table th, 
+    .vendor-table td {
+        border: 1px solid #ccc !important;
+        padding: 8px !important;
+        color: #000 !important;
+        background: transparent !important;
+    }
+    
+    .vendor-table th {
+        background-color: #f5f5f5 !important;
+        font-weight: bold !important;
+    }
+    
+    /* 5. 週報列印自適應排版 */
+    body.printing-weekly-report .app-container {
+        display: none !important;
+    }
+    
+    body.printing-weekly-report #weekly-report-print-area {
+        display: block !important;
+        background: #fff !important;
+        color: #000 !important;
+        padding: 30px !important;
+    }
+    
+    body.printing-weekly-report #weekly-report-print-area h1,
+    body.printing-weekly-report #weekly-report-print-area h2,
+    body.printing-weekly-report #weekly-report-print-area h3 {
+        color: #000 !important;
+        border-bottom: 1px solid #ddd !important;
+        padding-bottom: 8px !important;
+        margin-top: 24px !important;
+    }
+    
+    body.printing-weekly-report #weekly-report-print-area p,
+    body.printing-weekly-report #weekly-report-print-area li {
+        font-size: 14px !important;
+        color: #333 !important;
+    }
 }
 
 

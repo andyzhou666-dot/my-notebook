@@ -24,6 +24,13 @@ const app = (() => {
                 btn.innerHTML = '<i class="fa-solid fa-sun"></i> <span id="theme-toggle-text">柔和淺色模式</span>';
             }
         }
+
+        // 通知儀表板更新圖表主題顏色
+        if (window.dashboard && typeof window.dashboard.updateTheme === 'function') {
+            setTimeout(() => {
+                window.dashboard.updateTheme();
+            }, 100);
+        }
     };
 
     const toggleTheme = () => {
@@ -56,6 +63,9 @@ const app = (() => {
             }
             if (window.kb && typeof window.kb.init === 'function') {
                 await window.kb.init();
+            }
+            if (window.dashboard && typeof window.dashboard.init === 'function') {
+                await window.dashboard.init();
             }
 
             // 3. 初始化 Google 同步服務
@@ -126,6 +136,8 @@ const app = (() => {
             window.vendors.render();
         } else if (tabId === 'kb-section' && window.kb && typeof window.kb.render === 'function') {
             window.kb.render();
+        } else if (tabId === 'dashboard-section' && window.dashboard && typeof window.dashboard.render === 'function') {
+            window.dashboard.render();
         }
     };
 
@@ -202,6 +214,86 @@ const app = (() => {
                 closeModal();
                 cleanUp();
                 resolve(false);
+            };
+
+            const closeModal = () => {
+                modal.querySelector('.modal').style.transform = 'scale(0.9)';
+                modal.classList.remove('active');
+            };
+
+            confirmBtn.addEventListener('click', onConfirm);
+            cancelBtn.addEventListener('click', onCancel);
+            closeBtn.addEventListener('click', onCancel);
+        });
+    };
+
+    /**
+     * 客製化輸入對話框 (Promise-based Custom Prompt)
+     */
+    const prompt = (message, defaultValue = '', title = '系統輸入') => {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('global-dialog-modal');
+            const titleEl = document.getElementById('global-dialog-title');
+            const msgEl = document.getElementById('global-dialog-message');
+            const confirmBtn = document.getElementById('global-dialog-confirm-btn');
+            const cancelBtn = document.getElementById('global-dialog-cancel-btn');
+            const closeBtn = document.getElementById('global-dialog-close-btn');
+
+            titleEl.textContent = title;
+            
+            // 建立提示文字與輸入框 HTML
+            msgEl.innerHTML = `
+                <div style="text-align: left; margin-bottom: 12px; font-weight: 550;">${message}</div>
+                <input type="text" id="global-dialog-prompt-input" value="${defaultValue.replace(/"/g, '&quot;')}" 
+                       style="width: 100%; padding: 8px 12px; font-size: 0.9rem; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+            `;
+            
+            cancelBtn.style.display = 'inline-flex'; // 顯示取消按鈕
+
+            modal.classList.add('active');
+            setTimeout(() => {
+                modal.querySelector('.modal').style.transform = 'scale(1)';
+                const inputEl = document.getElementById('global-dialog-prompt-input');
+                if (inputEl) {
+                    inputEl.focus();
+                    // 將游標移到最後
+                    inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+                }
+            }, 10);
+
+            // 支援 Enter 鍵送出
+            setTimeout(() => {
+                const inputEl = document.getElementById('global-dialog-prompt-input');
+                if (inputEl) {
+                    inputEl.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            onConfirm();
+                        }
+                    });
+                }
+            }, 20);
+
+            const cleanUp = () => {
+                confirmBtn.removeEventListener('click', onConfirm);
+                cancelBtn.removeEventListener('click', onCancel);
+                closeBtn.removeEventListener('click', onCancel);
+                // 恢復原狀，防止影響 alert / confirm
+                msgEl.innerHTML = '';
+            };
+
+            const onConfirm = () => {
+                const inputEl = document.getElementById('global-dialog-prompt-input');
+                const val = inputEl ? inputEl.value : null;
+                closeModal();
+                cleanUp();
+                resolve(val);
+            };
+
+            const onCancel = () => {
+                closeModal();
+                cleanUp();
+                resolve(null);
             };
 
             const closeModal = () => {
@@ -453,6 +545,36 @@ const app = (() => {
             });
         }
 
+        // 自訂 Gemini API Key 綁定
+        const geminiKeyInput = document.getElementById('gemini-api-key-input');
+        const saveGeminiBtn = document.getElementById('save-gemini-key-btn');
+        if (geminiKeyInput && saveGeminiBtn) {
+            geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+            
+            saveGeminiBtn.addEventListener('click', () => {
+                const key = geminiKeyInput.value.trim();
+                if (key) {
+                    localStorage.setItem('gemini_api_key', key);
+                    showToast('Gemini API Key 已安全儲存於本地', 'success');
+                } else {
+                    localStorage.removeItem('gemini_api_key');
+                    showToast('已清除 Gemini API Key', 'info');
+                }
+            });
+        }
+
+        // 自訂 Gemini Model 選擇器綁定
+        const geminiModelSelect = document.getElementById('gemini-model-select');
+        if (geminiModelSelect) {
+            geminiModelSelect.value = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+            
+            geminiModelSelect.addEventListener('change', (e) => {
+                const selectedModel = e.target.value;
+                localStorage.setItem('gemini_model', selectedModel);
+                showToast(`已將預設模型切換為：${selectedModel}`, 'info');
+            });
+        }
+
         // 登入事件
         loginBtn.addEventListener('click', () => {
             sync.login();
@@ -605,6 +727,7 @@ const app = (() => {
         showToast,
         confirm,
         alert,
+        prompt,
         openLightbox,
         toggleTheme
     };

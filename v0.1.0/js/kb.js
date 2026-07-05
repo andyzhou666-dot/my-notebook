@@ -9,6 +9,7 @@ const kb = (() => {
     let currentKbItemId = null; // 當前選擇的知識條目 ID
     let viewState = 'empty'; // empty, list, detail, edit
     let kbSearchQuery = ''; // 知識庫搜尋關鍵字
+    let currentKbTagFilter = null; // 當前選取的標籤篩選
     const collapsedCategories = new Set(JSON.parse(localStorage.getItem('kb_collapsed_categories') || '[]')); // 折疊的分類 ID 集合
 
     const init = async () => {
@@ -62,6 +63,65 @@ const kb = (() => {
                 dropdowns.forEach(d => d.style.display = 'none');
             }
         });
+
+        // 知識庫編輯區鍵盤輔助 (處理程式碼區塊 Backspace 刪除與 Ctrl+Enter 跳出)
+        const kbEditor = document.getElementById('kb-markdown-input');
+        if (kbEditor) {
+            kbEditor.addEventListener('keydown', (e) => {
+                const selection = window.getSelection();
+                if (!selection.rangeCount) return;
+                const range = selection.getRangeAt(0);
+
+                // 1. 處理 Backspace 鍵
+                if (e.key === 'Backspace') {
+                    let node = range.startContainer;
+                    while (node && node !== kbEditor) {
+                        if (node.nodeName === 'PRE') {
+                            const textContent = node.textContent.replace(/\u200B/g, '').trim();
+                            // 如果程式碼區塊為空或僅含空字元，按 Backspace 將其轉為普通段落，消除灰底
+                            if (textContent === '' || textContent === '\n') {
+                                e.preventDefault();
+                                const p = document.createElement('p');
+                                p.innerHTML = '<br>';
+                                node.parentNode.replaceChild(p, node);
+                                
+                                // 移回游標
+                                const newRange = document.createRange();
+                                newRange.selectNodeContents(p);
+                                newRange.collapse(true);
+                                selection.removeAllRanges();
+                                selection.addRange(newRange);
+                            }
+                            return;
+                        }
+                        node = node.parentNode;
+                    }
+                }
+
+                // 2. 處理 Ctrl+Enter 鍵 (快速跳出程式碼區塊)
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    let node = range.startContainer;
+                    while (node && node !== kbEditor) {
+                        if (node.nodeName === 'PRE') {
+                            e.preventDefault();
+                            const p = document.createElement('p');
+                            p.innerHTML = '<br>';
+                            // 在 PRE 後方插入新段落
+                            node.parentNode.insertBefore(p, node.nextSibling);
+                            
+                            // 將游標移到新段落
+                            const newRange = document.createRange();
+                            newRange.selectNodeContents(p);
+                            newRange.collapse(true);
+                            selection.removeAllRanges();
+                            selection.addRange(newRange);
+                            return;
+                        }
+                        node = node.parentNode;
+                    }
+                }
+            });
+        }
     };
 
     /**
@@ -114,6 +174,7 @@ const kb = (() => {
             knowledgeList = await db.getAll('knowledge');
 
             renderCategoryTree();
+            renderTagCloud(); // 渲染標籤雲
             
             // 如果原本選取了分類，則保持選取狀態並重新載入列表
             if (currentCategoryId) {
@@ -125,6 +186,9 @@ const kb = (() => {
                     currentCategoryId = null;
                     switchViewState('empty');
                 }
+            } else if (currentKbTagFilter) {
+                // 保持標籤篩選狀態
+                switchViewState('list');
             } else {
                 switchViewState('empty');
             }
@@ -222,6 +286,7 @@ const kb = (() => {
     const selectCategory = (id) => {
         currentCategoryId = id;
         currentKbItemId = null;
+        currentKbTagFilter = null; // 清除標籤篩選
         
         // 更新分類標題
         const titleElement = document.getElementById('current-category-title');
@@ -230,7 +295,102 @@ const kb = (() => {
             titleElement.textContent = cat.name;
         }
 
+        // 清除搜尋框
+        kbSearchQuery = '';
+        const searchInput = document.getElementById('search-kb-input');
+        if (searchInput) searchInput.value = '';
+
         renderCategoryTree();
+        renderTagCloud(); // 重新整理標籤選取狀態
+        switchViewState('list');
+    };
+
+    /**
+     * 渲染知識庫側邊欄底部標籤雲
+     */
+    const renderTagCloud = () => {
+        const container = document.getElementById('kb-tag-cloud');
+        if (!container) return;
+
+        // 計算標籤出現次數
+        const tagCounts = {};
+        knowledgeList.forEach(item => {
+            if (item.tags && item.tags.length > 0) {
+                item.tags.forEach(tag => {
+                    const trimmed = tag.trim();
+                    if (trimmed) {
+                        tagCounts[trimmed] = (tagCounts[trimmed] || 0) + 1;
+                    }
+                });
+            }
+        });
+
+        const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+
+        if (sortedTags.length === 0) {
+            container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-muted); padding: 4px;">無標籤</div>';
+            return;
+        }
+
+        const counts = sortedTags.map(t => t[1]);
+        const maxCount = Math.max(...counts);
+        const minCount = Math.min(...counts);
+
+        let html = '';
+        sortedTags.forEach(([tag, count]) => {
+            let fontSize = 0.8;
+            if (maxCount !== minCount) {
+                // 字體大小在 0.75rem ~ 1.15rem 之間動態縮放
+                fontSize = 0.75 + ((count - minCount) / (maxCount - minCount)) * 0.4;
+            }
+            
+            const isActive = currentKbTagFilter === tag;
+            
+            html += `
+                <span class="note-tag ${isActive ? 'active' : ''}" 
+                      style="font-size: ${fontSize}rem; cursor: pointer; display: inline-block; padding: 2px 6px; border-radius: 4px; border: 1px solid ${isActive ? 'var(--color-primary)' : 'var(--panel-border)'}; background: ${isActive ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.02)'}; margin-bottom: 2px;" 
+                      onclick="kb.selectTag('${escapeHtml(tag)}')">
+                    #${escapeHtml(tag)} <span style="font-size: 0.7em; opacity: 0.6;">(${count})</span>
+                </span>
+            `;
+        });
+
+        container.innerHTML = html;
+    };
+
+    /**
+     * 點擊標籤雲中的標籤進行過濾
+     */
+    const selectTag = (tag) => {
+        if (currentKbTagFilter === tag) {
+            // 重複點擊已選取標籤，清除篩選狀態
+            currentKbTagFilter = null;
+            currentCategoryId = null;
+            const titleElement = document.getElementById('current-category-title');
+            if (titleElement) titleElement.textContent = '未選擇分類';
+            renderCategoryTree();
+            renderTagCloud();
+            switchViewState('empty');
+            return;
+        }
+
+        currentKbTagFilter = tag;
+        currentCategoryId = null; // 清除大類/子分類的選取狀態
+        currentKbItemId = null;
+
+        // 更新分類標題
+        const titleElement = document.getElementById('current-category-title');
+        if (titleElement) {
+            titleElement.innerHTML = `<i class="fa-solid fa-tag" style="color: var(--color-primary); margin-right: 6px;"></i>標籤篩選：#${escapeHtml(tag)}`;
+        }
+
+        // 清除關鍵字搜尋框
+        kbSearchQuery = '';
+        const searchInput = document.getElementById('search-kb-input');
+        if (searchInput) searchInput.value = '';
+
+        renderCategoryTree();
+        renderTagCloud();
         switchViewState('list');
     };
 
@@ -347,8 +507,13 @@ const kb = (() => {
         const listContainer = document.getElementById('kb-items-list');
         if (!listContainer) return;
 
-        // 篩選出目前分類下的條目
-        let items = knowledgeList.filter(k => k.categoryId === currentCategoryId);
+        // 1. 決定資料來源：若是標籤篩選則讀取所有含有該標籤的項目；否則讀取該分類項目
+        let items = [];
+        if (currentKbTagFilter) {
+            items = knowledgeList.filter(k => k.tags && k.tags.includes(currentKbTagFilter));
+        } else {
+            items = knowledgeList.filter(k => k.categoryId === currentCategoryId);
+        }
 
         // 如果有搜尋關鍵字，進行模糊比對過濾
         if (kbSearchQuery) {
@@ -372,7 +537,7 @@ const kb = (() => {
                 listContainer.innerHTML = `
                     <div class="kb-empty-state" style="grid-column: 1 / -1; padding: 40px 0;">
                         <i class="fa-solid fa-book-bookmark" style="font-size: 2rem;"></i>
-                        <p>此分類目前沒有任何知識條目。請點選「新增條目」建立。</p>
+                        <p>目前沒有任何知識條目。請點選「新增條目」建立。</p>
                     </div>
                 `;
             }
@@ -381,16 +546,46 @@ const kb = (() => {
 
         let html = '';
         items.forEach(item => {
-            // 取前 60 字作為預覽文字
-            const previewText = item.content ? item.content.substring(0, 60).replace(/[#*`_]/g, '') + '...' : '無內容';
+            // 2. 智慧提取包含搜尋文字的摘要片段，並移除 markdown 語法符號
+            let previewTextHtml = '';
+            const cleanContent = item.content ? item.content.replace(/[#*`_~\[\]()\-]/g, ' ').replace(/\s+/g, ' ') : '';
+            
+            let titleHtml = escapeHtml(item.title);
+            
+            if (kbSearchQuery) {
+                const lowerContent = cleanContent.toLowerCase();
+                const queryIdx = lowerContent.indexOf(kbSearchQuery);
+                
+                let snippet = '';
+                if (queryIdx !== -1) {
+                    // 向前取 20 字，向後取 40 字
+                    const start = Math.max(0, queryIdx - 20);
+                    const end = Math.min(cleanContent.length, queryIdx + kbSearchQuery.length + 40);
+                    snippet = (start > 0 ? '...' : '') + cleanContent.substring(start, end) + (end < cleanContent.length ? '...' : '');
+                } else {
+                    snippet = cleanContent.substring(0, 60) + (cleanContent.length > 60 ? '...' : '');
+                }
+                
+                // 先安全跳脫 HTML
+                let escapedSnippet = escapeHtml(snippet);
+                
+                // 再對關鍵字進行 <mark> 高亮標註
+                const escapedQuery = kbSearchQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(`(${escapedQuery})`, 'gi');
+                
+                previewTextHtml = escapedSnippet.replace(regex, '<mark style="background: rgba(245, 158, 11, 0.35); color: inherit; padding: 1px 3px; border-radius: 2px; font-weight: bold;">$1</mark>');
+                titleHtml = titleHtml.replace(regex, '<mark style="background: rgba(245, 158, 11, 0.35); color: inherit; padding: 1px 3px; border-radius: 2px; font-weight: bold;">$1</mark>');
+            } else {
+                previewTextHtml = escapeHtml(cleanContent.substring(0, 60) + (cleanContent.length > 60 ? '...' : ''));
+            }
             
             html += `
                 <div class="kb-item-card" onclick="kb.showDetail(${item.id})">
-                    <div class="kb-item-card-title">${escapeHtml(item.title)}</div>
-                    <div class="kb-item-card-preview">${escapeHtml(previewText)}</div>
+                    <div class="kb-item-card-title">${titleHtml}</div>
+                    <div class="kb-item-card-preview">${previewTextHtml || '無內容'}</div>
                     ${item.tags && item.tags.length > 0 ? `
                         <div class="note-content-tags">
-                            ${item.tags.map(t => `<span class="note-tag">#${escapeHtml(t)}</span>`).join('')}
+                            ${item.tags.map(t => `<span class="note-tag ${currentKbTagFilter === t ? 'active' : ''}">#${escapeHtml(t)}</span>`).join('')}
                         </div>
                     ` : ''}
                 </div>
@@ -468,12 +663,17 @@ const kb = (() => {
             const item = knowledgeList.find(k => k.id === id);
             titleInput.value = item.title;
             tagsInput.value = item.tags ? item.tags.join(', ') : '';
-            contentInput.value = item.content || '';
+            // 關鍵：載入時若有資料，先用 marked 轉成 HTML 以在編輯框內實現所見即所得富文本
+            if (typeof marked !== 'undefined' && item.content) {
+                contentInput.innerHTML = marked.parse(item.content);
+            } else {
+                contentInput.innerHTML = item.content || '';
+            }
         } else {
             currentKbItemId = null;
             titleInput.value = '';
             tagsInput.value = '';
-            contentInput.value = '';
+            contentInput.innerHTML = '';
         }
 
         switchViewState('edit');
@@ -482,7 +682,8 @@ const kb = (() => {
     const saveKbItem = async () => {
         const title = document.getElementById('kb-title-input').value.trim();
         const tagsVal = document.getElementById('kb-tags-input').value.trim();
-        const content = document.getElementById('kb-markdown-input').value;
+        // 關鍵：儲存時直接抓取富文本編輯器產出的 HTML 內容
+        const content = document.getElementById('kb-markdown-input').innerHTML;
 
         if (!title) {
             await app.alert('標題為必填項目！');
@@ -589,14 +790,8 @@ const kb = (() => {
             previewTab.style.fontWeight = '600';
             
             // 渲染預覽內容
-            const markdownVal = document.getElementById('kb-markdown-input').value;
-            let previewHtml = '';
-            if (typeof marked !== 'undefined') {
-                previewHtml = marked.parse(markdownVal || '*無內容*');
-            } else {
-                previewHtml = `<pre>${escapeHtml(markdownVal)}</pre>`;
-            }
-            previewContainer.innerHTML = previewHtml;
+            const editorHtml = document.getElementById('kb-markdown-input').innerHTML;
+            previewContainer.innerHTML = editorHtml || '<p style="color:var(--text-muted);">*無內容*</p>';
             previewContainer.style.display = 'block';
         }
     };
@@ -623,66 +818,91 @@ const kb = (() => {
     };
 
     /**
-     * 格式化編輯器文字 (插入 Markdown / HTML)
+     * 格式化編輯器文字 (所見即所得富文本編輯)
      */
     const formatText = (type, value = '') => {
-        const textarea = document.getElementById('kb-markdown-input');
-        if (!textarea) return;
+        const editor = document.getElementById('kb-markdown-input');
+        if (!editor) return;
 
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const text = textarea.value;
-        const selection = text.substring(start, end);
-
-        let before = '';
-        let after = '';
+        editor.focus();
 
         switch (type) {
             case 'bold':
-                before = '**';
-                after = '**';
+                document.execCommand('bold', false, null);
                 break;
             case 'italic':
-                before = '*';
-                after = '*';
+                document.execCommand('italic', false, null);
                 break;
             case 'underline':
-                before = '<u>';
-                after = '</u>';
+                document.execCommand('underline', false, null);
+                break;
+            case 'strike':
+                document.execCommand('strikeThrough', false, null);
+                break;
+            case 'clean':
+                document.execCommand('removeFormat', false, null);
                 break;
             case 'h1':
-                before = '\n# ';
-                after = '';
+                document.execCommand('formatBlock', false, '<h1>');
                 break;
             case 'h2':
-                before = '\n## ';
-                after = '';
+                document.execCommand('formatBlock', false, '<h2>');
+                break;
+            case 'quote':
+                const selectedQuote = document.getSelection().toString() || '引用文字';
+                document.execCommand('insertHTML', false, `<blockquote style="border-left: 4px solid var(--color-primary); padding-left: 12px; margin: 10px 0; color: var(--text-secondary); font-style: italic;">${escapeHtml(selectedQuote)}</blockquote><p><br></p>`);
+                break;
+            case 'hr':
+                document.execCommand('insertHorizontalRule', false, null);
+                break;
+            case 'align-left':
+                document.execCommand('justifyLeft', false, null);
+                break;
+            case 'align-center':
+                document.execCommand('justifyCenter', false, null);
+                break;
+            case 'align-right':
+                document.execCommand('justifyRight', false, null);
+                break;
+            case 'link':
+                const selection = document.getSelection().toString();
+                const url = prompt('請輸入連結網址 (例如: https://example.com):');
+                if (url) {
+                    if (!selection) {
+                        document.execCommand('insertHTML', false, `<a href="${url}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">${url}</a>`);
+                    } else {
+                        document.execCommand('createLink', false, url);
+                        // 自動為選取的連結設定 target="_blank" 與配色
+                        const sel = window.getSelection();
+                        if (sel.rangeCount > 0) {
+                            const el = sel.anchorNode.parentNode;
+                            if (el.nodeName === 'A') {
+                                el.setAttribute('target', '_blank');
+                                el.style.color = 'var(--color-primary)';
+                                el.style.textDecoration = 'underline';
+                            }
+                        }
+                    }
+                }
                 break;
             case 'ul':
-                before = '\n- ';
-                after = '';
+                document.execCommand('insertUnorderedList', false, null);
+                break;
+            case 'ol':
+                document.execCommand('insertOrderedList', false, null);
                 break;
             case 'code':
-                before = '\n```\n';
-                after = '\n```\n';
+                const selectionText = document.getSelection().toString() || ' ';
+                document.execCommand('insertHTML', false, `<pre style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; font-family: monospace; border: 1px solid var(--panel-border); margin: 8px 0; color: var(--text-primary);"><code style="background:none; padding:0; color:inherit;">${escapeHtml(selectionText)}</code></pre><p><br></p>`);
                 break;
             case 'color':
-                before = `<span style="color: ${value};">`;
-                after = '</span>';
+                document.execCommand('foreColor', false, value);
                 break;
             case 'size':
-                before = `<span style="font-size: ${value};">`;
-                after = '</span>';
+                const selectedText = document.getSelection().toString() || '選取文字';
+                document.execCommand('insertHTML', false, `<span style="font-size: ${value};">${escapeHtml(selectedText)}</span>`);
                 break;
         }
-
-        const replacement = before + (selection || '選取文字') + after;
-        textarea.value = text.substring(0, start) + replacement + text.substring(end);
-        
-        // 重設選區與焦點
-        textarea.focus();
-        textarea.selectionStart = start + before.length;
-        textarea.selectionEnd = start + before.length + (selection || '選取文字').length;
 
         // 關閉所有下拉選單
         const dropdowns = document.querySelectorAll('.kb-toolbar-dropdown');
@@ -716,7 +936,8 @@ const kb = (() => {
         toggleCategoryCollapse,
         switchEditorTab,
         toggleToolbarDropdown,
-        formatText
+        formatText,
+        selectTag
     };
 })();
 

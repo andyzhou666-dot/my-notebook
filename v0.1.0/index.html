@@ -27,6 +27,8 @@
     <link rel="stylesheet" href="css/style.css">
     <!-- Marked.js (Markdown parser) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Chart.js (Charts) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Tesseract.js (OCR) -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <!-- Google Identity Services (GIS) & Google Client Library (gapi) -->
@@ -37,11 +39,12 @@
     <div class="app-container">
         <!-- Sidebar Navigation (Desktop) -->
         <aside class="sidebar" id="sidebar-nav">
-            <div class="sidebar-header">
+            <div class="sidebar-header" style="flex-direction: column; align-items: flex-start; gap: 4px; padding-bottom: 16px;">
                 <div class="logo">
                     <i class="fa-solid fa-brain-circuit"></i>
-                    <span>Antigravity</span>
+                    <span>My Notebook</span>
                 </div>
+                <span class="app-version" style="font-size: 0.72rem; color: var(--text-muted); margin-left: 36px; font-weight: 500; letter-spacing: 0.5px;">版本：v0.1.0</span>
             </div>
             <nav class="nav-menu">
                 <a href="#" class="nav-item active" data-target="notes-section" id="nav-btn-notes-pc">
@@ -55,6 +58,10 @@
                 <a href="#" class="nav-item" data-target="kb-section" id="nav-btn-kb-pc">
                     <i class="fa-solid fa-book-open"></i>
                     <span>知識庫</span>
+                </a>
+                <a href="#" class="nav-item" data-target="dashboard-section" id="nav-btn-dashboard-pc">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>工作儀表板</span>
                 </a>
                 <a href="#" class="nav-item" data-target="settings-section" id="nav-btn-settings-pc">
                     <i class="fa-solid fa-sliders"></i>
@@ -74,9 +81,12 @@
 
         <!-- Mobile Header -->
         <header class="mobile-header">
-            <div class="logo">
-                <i class="fa-solid fa-brain-circuit"></i>
-                <span>Antigravity</span>
+            <div style="display: flex; flex-direction: column; gap: 2px; justify-content: center; height: 100%;">
+                <div class="logo" style="font-size: 1.1rem; gap: 8px;">
+                    <i class="fa-solid fa-brain-circuit" style="font-size: 1.25rem;"></i>
+                    <span>My Notebook</span>
+                </div>
+                <span class="app-version" style="font-size: 0.62rem; color: var(--text-muted); margin-left: 28px; font-weight: 500; line-height: 1;">版本：v0.1.0</span>
             </div>
             <button class="mobile-settings-btn" id="mobile-settings-toggle" onclick="app.switchTab('settings-section')">
                 <i class="fa-solid fa-circle-user"></i>
@@ -90,6 +100,9 @@
                 <div class="section-header">
                     <h2>每日工作日誌</h2>
                     <div class="header-actions" style="display: flex; gap: 8px;">
+                        <button id="weekly-report-btn" onclick="notes.openWeeklyReportModal()" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem; height: auto;">
+                            <i class="fa-solid fa-file-invoice"></i> 產生工作週報
+                        </button>
                         <button id="export-logs-btn" onclick="notes.openExportModal()" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem; height: auto;">
                             <i class="fa-solid fa-file-excel"></i> 匯出日誌 Excel
                         </button>
@@ -115,55 +128,43 @@
                             <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary);">進行中工作</div>
                         </div>
                     </div>
-                    <div class="log-stat-card glass" id="stat-log-failed-card" onclick="notes.setFilterStatus('failed')" style="cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--border-radius-md); border: 1px solid var(--panel-border); transition: var(--transition-smooth);">
-                        <div class="stat-icon" style="color: #f87171; font-size: 1.5rem;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div class="log-stat-card glass" id="stat-log-success-card" onclick="notes.setFilterStatus('success')" style="cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--border-radius-md); border: 1px solid var(--panel-border); transition: var(--transition-smooth);">
+                        <div class="stat-icon" style="color: #4ade80; font-size: 1.5rem;"><i class="fa-solid fa-circle-check"></i></div>
                         <div class="stat-info">
-                            <div class="stat-value" id="stat-active-failed" style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">0</div>
-                            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary);">⚠️ 遇阻/卡關</div>
+                            <div class="stat-value" id="stat-active-success" style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">0</div>
+                            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary);">已完成工作</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- 今日日誌編輯器 -->
-                <div class="log-editor-panel glass" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 8px;">
-                        <span style="font-weight: 600; color: var(--text-primary); font-size: 0.95rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div class="log-editor-panel glass" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow-premium);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--panel-border); padding-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                        <span style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; display: flex; align-items: center; gap: 8px;">
                             <i class="fa-solid fa-calendar-day" style="color: var(--color-primary);"></i>
+                            選擇日誌日期：
                             <input type="date" id="log-date-picker" style="background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); padding: 4px 8px; border-radius: var(--border-radius-sm); font-size: 0.85rem; font-family: inherit; font-weight: 600; width: auto; height: auto; outline: none; cursor: pointer;">
-                            <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: normal;">工作日誌</span>
                         </span>
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="notes.clearTodayLogDraft()" style="padding: 4px 8px; font-size: 0.75rem; height: auto; width: auto; min-height: 0;">清空草稿</button>
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;">
+                            💡 提示：輸入事項後按下 Enter 或點擊「新增」可直接登錄，心得可在下方卡片內直接輸入並自動儲存。
+                        </span>
                     </div>
                     
                     <!-- 事項輸入行 -->
-                    <div class="log-item-input-row" style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
-                        <input type="text" id="log-item-text" placeholder="輸入工作事項 (例如: 優化 Excel 匯出樣式 #專案A)..." style="flex: 4; min-width: 220px; font-size: 0.85rem; padding: 8px 12px;">
-                        <select id="log-item-status" onchange="notes.handleStatusChange(this.value)" style="flex: 1; min-width: 100px; font-size: 0.85rem; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                    <div class="log-item-input-row" style="display: flex; gap: 8px; align-items: center; width: 100%;">
+                        <input type="text" id="log-item-text" placeholder="快速新增事項 (例如: 優化 Excel 匯出樣式 #專案A)..." style="flex: 1; font-size: 0.85rem; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                        <select id="log-item-status" onchange="notes.handleStatusChange(this.value)" style="width: 120px; font-size: 0.85rem; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none; cursor: pointer;">
                             <option value="todo">⏳ 進行中</option>
                             <option value="success">✅ 已完成</option>
-                            <option value="failed">❌ 遇阻/未成功</option>
                         </select>
-                        <button id="add-log-item-btn" onclick="notes.addLogItemDraft()" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; width: auto; height: auto;">
-                            <i class="fa-solid fa-plus"></i> 新增事項
+                        <button id="add-log-item-btn" onclick="notes.addLogItemDirect()" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; width: auto; height: auto; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-plus"></i> 新增
                         </button>
                     </div>
                     
                     <!-- 卡關原因輸入框 (預設隱藏) -->
                     <div id="log-item-fail-reason-row" style="display: none; width: 100%;">
-                        <input type="text" id="log-item-fail-reason" placeholder="請輸入遇阻/卡關原因 (例如: API伺服器異常中斷、測試設備損壞)..." style="font-size: 0.8rem; padding: 8px 12px; width: 100%; border: 1px solid rgba(248,113,113,0.4); background: rgba(248,113,113,0.05);">
-                    </div>
-                    
-                    <!-- 今日已新增事項預覽清單 -->
-                    <div id="log-draft-items-preview" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 2px;">
-                        <!-- 動態渲染事項草稿 -->
-                    </div>
-                    
-                    <!-- 心得與儲存按鈕 -->
-                    <div style="display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--panel-border); padding-top: 12px; flex-wrap: wrap;">
-                        <input type="text" id="log-day-notes" placeholder="今日工作心得或備註事項 (選填)..." style="flex: 4; min-width: 220px; font-size: 0.8rem; padding: 8px 12px;">
-                        <button id="save-log-btn" onclick="notes.saveTodayLog()" class="btn btn-primary" style="flex: 1; min-width: 120px; padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: var(--color-primary); width: auto; height: auto;">
-                            <i class="fa-solid fa-floppy-disk"></i> <span id="save-log-btn-text">儲存今日日誌</span>
-                        </button>
+                        <input type="text" id="log-item-fail-reason" placeholder="請輸入遇阻/卡關原因 (例如: API伺服器異常中斷、測試設備損壞)..." style="font-size: 0.8rem; padding: 8px 12px; width: 100%; border: 1px solid rgba(248,113,113,0.4); background: rgba(248,113,113,0.05); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
                     </div>
                 </div>
 
@@ -201,6 +202,9 @@
                     <div class="header-actions">
                         <button id="export-vendors-btn" class="btn btn-secondary">
                             <i class="fa-solid fa-file-excel"></i> <span>匯出 Excel</span>
+                        </button>
+                        <button onclick="window.print()" class="btn btn-secondary">
+                            <i class="fa-solid fa-print"></i> <span>列印報表</span>
                         </button>
                         <div class="view-switch-group" style="display: inline-flex; background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md); padding: 2px;">
                             <button id="vendor-view-card-btn" class="btn-view-switch active" title="卡片檢視" style="border: none; background: none; color: var(--text-primary); padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 0.9rem; width: auto; height: auto;"><i class="fa-solid fa-grip"></i></button>
@@ -250,6 +254,16 @@
                         <div class="kb-tree" id="kb-category-tree">
                             <!-- Dynamic Folders -->
                         </div>
+                        
+                        <!-- 知識庫標籤雲區區 -->
+                        <div class="kb-sidebar-tags-section" style="margin-top: 24px; border-top: 1px solid var(--panel-border); padding-top: 16px;">
+                            <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                                <i class="fa-solid fa-tags" style="color: var(--color-primary);"></i> 知識庫標籤雲
+                            </h4>
+                            <div id="kb-tag-cloud" style="display: flex; flex-wrap: wrap; gap: 8px 6px; padding: 4px;">
+                                <!-- 動態標籤雲 -->
+                            </div>
+                        </div>
                     </div>
 
                     <!-- KB Content Area -->
@@ -298,17 +312,32 @@
                                 <div id="editor-edit-container" style="display: flex; flex-direction: column; flex-grow: 1; gap: 8px; width: 100%;">
                                     <!-- 工具列 -->
                                     <div class="editor-toolbar" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md); align-items: center;">
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('bold')" title="粗體 (Ctrl+B)" style="padding: 4px 8px; font-weight: bold; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-bold"></i></button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('italic')" title="斜體 (Ctrl+I)" style="padding: 4px 8px; font-style: italic; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-italic"></i></button>
+                                        <!-- 第一組：文字裝飾與格式清除 -->
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('bold')" title="粗體" style="padding: 4px 8px; font-weight: bold; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-bold"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('italic')" title="斜體" style="padding: 4px 8px; font-style: italic; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-italic"></i></button>
                                         <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('underline')" title="底線" style="padding: 4px 8px; text-decoration: underline; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-underline"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('strike')" title="刪除線" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-strikethrough"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('clean')" title="清除格式" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-eraser"></i></button>
                                         
                                         <div style="width: 1px; height: 16px; background: var(--panel-border); margin: 0 4px;"></div>
                                         
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('h1')" title="大標題" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;">H1</button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('h2')" title="中標題" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;">H2</button>
+                                        <!-- 第二組：標題、引用與分割線 -->
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('h1')" title="大標題" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem; font-weight: bold;">H1</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('h2')" title="中標題" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem; font-weight: bold;">H2</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('quote')" title="引用區塊" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-quote-left"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('hr')" title="水平分割線" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-minus"></i></button>
                                         
                                         <div style="width: 1px; height: 16px; background: var(--panel-border); margin: 0 4px;"></div>
                                         
+                                        <!-- 第三組：對齊與連結 -->
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('align-left')" title="靠左對齊" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-align-left"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('align-center')" title="置中對齊" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-align-center"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('align-right')" title="靠右對齊" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-align-right"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('link')" title="插入超連結" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-link"></i></button>
+                                        
+                                        <div style="width: 1px; height: 16px; background: var(--panel-border); margin: 0 4px;"></div>
+                                        
+                                        <!-- 第四組：色彩與字型大小 -->
                                         <!-- 文字顏色下拉選單 -->
                                         <div class="dropdown-container" id="kb-color-dropdown-container" style="position: relative; display: inline-block;">
                                             <button type="button" class="btn btn-secondary btn-sm" onclick="kb.toggleToolbarDropdown(event, 'kb-color-dropdown')" title="文字顏色" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
@@ -334,14 +363,17 @@
                                                 <a href="#" onclick="event.preventDefault(); kb.formatText('size', '14px');" style="font-size: 0.8rem; display: block; padding: 6px 10px; color: var(--text-primary); text-decoration: none; border-radius: 2px;">小 (14px)</a>
                                             </div>
                                         </div>
-
+                                        
                                         <div style="width: 1px; height: 16px; background: var(--panel-border); margin: 0 4px;"></div>
+                                        
+                                        <!-- 第五組：列表與代碼 -->
                                         <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('ul')" title="無序列表" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-list-ul"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('ol')" title="有序列表" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-list-ol"></i></button>
                                         <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('code')" title="程式碼區塊" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-code"></i></button>
                                     </div>
 
                                     <div class="editor-body" style="flex-grow: 1; display: flex; flex-direction: column; height: 100%;">
-                                        <textarea id="kb-markdown-input" placeholder="撰寫您的知識庫內容 (支援 Markdown 與 HTML 語法)..." style="width: 100%; flex-grow: 1; height: 100%; min-height: 250px;"></textarea>
+                                        <div id="kb-markdown-input" class="kb-wysiwyg-editor" contenteditable="true" placeholder="在此處直接打字並套用格式，所見即所得..." style="width: 100%; flex-grow: 1; min-height: 250px; outline: none; padding: 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); overflow-y: auto; text-align: left;"></div>
                                     </div>
                                 </div>
 
@@ -416,6 +448,41 @@
                         </div>
                     </div>
 
+                    <!-- Gemini AI Config -->
+                    <div class="settings-card">
+                        <div class="card-icon"><i class="fa-solid fa-robot"></i></div>
+                        <div class="card-info">
+                            <h3>Gemini AI 助理設定</h3>
+                            <p>設定您的 Google Gemini API 金鑰後，系統可以在產生週報時，直接呼叫 AI 幫您自動整理與提煉工作心得摘要。</p>
+                            <div class="form-group" style="margin-top: 10px; text-align: left; width: 100%;">
+                                <label for="gemini-api-key-input" style="font-weight: 600; margin-bottom: 6px; display: block; font-size: 0.85rem; color: var(--text-secondary);">
+                                    🔑 Google Gemini API Key
+                                </label>
+                                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                                    <input type="password" id="gemini-api-key-input" placeholder="貼上您的 API Key (例如 AIzaSy...)" style="flex-grow: 1; padding: 6px 12px; font-size: 0.85rem; height: auto; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                                    <button type="button" id="save-gemini-key-btn" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 550; width: auto; height: auto;">
+                                        儲存
+                                    </button>
+                                </div>
+
+                                <label for="gemini-model-select" style="font-weight: 600; margin-bottom: 6px; display: block; font-size: 0.85rem; color: var(--text-secondary);">
+                                    🤖 選擇 Gemini 模型 (若特定模型回報額度超限，請在此切換)
+                                </label>
+                                <div style="display: flex; gap: 8px;">
+                                    <select id="gemini-model-select" style="flex-grow: 1; padding: 8px 12px; font-size: 0.85rem; height: auto; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none; cursor: pointer;">
+                                        <option value="gemini-2.5-flash">gemini-2.5-flash (推薦 - 速度最快且免費額度高)</option>
+                                        <option value="gemini-2.0-flash">gemini-2.0-flash (次選 - 2.0 基礎版)</option>
+                                        <option value="gemini-1.5-flash">gemini-1.5-flash (經典型號)</option>
+                                        <option value="gemini-1.5-pro">gemini-1.5-pro (高難度任務專用)</option>
+                                    </select>
+                                </div>
+                                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; margin-bottom: 0; line-height: 1.4;">
+                                    * API Key 將安全儲存於您本地瀏覽器的 LocalStorage 中，摘要請求直接從您的瀏覽器發送至 Google 官方 API 節點，絕不會經過任何第三方中轉。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Local Backup -->
                     <div class="settings-card">
                         <div class="card-icon"><i class="fa-solid fa-database"></i></div>
@@ -446,6 +513,55 @@
                     </div>
                 </div>
             </section>
+
+            <!-- 5. Dashboard Section (工作儀表板) -->
+            <section id="dashboard-section" class="tab-content">
+                <div class="section-header">
+                    <h2>工作數據儀表板</h2>
+                </div>
+
+                <!-- GitHub 熱力圖 -->
+                <div class="dashboard-card glass" style="margin-bottom: 24px; padding: 20px; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md);">
+                    <h3 style="margin-top: 0; margin-bottom: 12px; font-size: 1rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-fire" style="color: var(--color-danger);"></i> 年度工作日誌熱力圖
+                    </h3>
+                    <div class="heatmap-container" style="overflow-x: auto; width: 100%; padding-bottom: 8px;">
+                        <!-- SVG 年度熱力圖將被渲染於此 -->
+                        <div id="heatmap-svg-container" style="min-width: 720px; display: flex; justify-content: center; align-items: center;"></div>
+                    </div>
+                    <div class="heatmap-legend" style="display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; padding-right: 12px;">
+                        <span>少</span>
+                        <span style="width: 10px; height: 10px; background: rgba(120, 113, 108, 0.15); border-radius: 2px;"></span>
+                        <span style="width: 10px; height: 10px; background: #c6e48b; border-radius: 2px;"></span>
+                        <span style="width: 10px; height: 10px; background: #7bc96f; border-radius: 2px;"></span>
+                        <span style="width: 10px; height: 10px; background: #239a3b; border-radius: 2px;"></span>
+                        <span style="width: 10px; height: 10px; background: #196127; border-radius: 2px;"></span>
+                        <span>多</span>
+                    </div>
+                </div>
+
+                <!-- 統計圖表網格 -->
+                <div class="dashboard-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                    <!-- 近30天任務狀態統計 -->
+                    <div class="dashboard-card glass" style="padding: 20px; min-height: 320px; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md);">
+                        <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 1.0rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-chart-bar" style="color: var(--color-primary);"></i>近 30 天任務狀態佔比
+                        </h3>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="task-status-chart"></canvas>
+                        </div>
+                    </div>
+                    <!-- 專案工時標籤佔比 -->
+                    <div class="dashboard-card glass" style="padding: 20px; min-height: 320px; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md);">
+                        <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 1.0rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-tags" style="color: var(--color-secondary);"></i>專案工時標籤分析 (#標籤)
+                        </h3>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="project-tags-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <!-- Mobile Navigation (Bottom Bar) -->
@@ -461,6 +577,10 @@
             <a href="#" class="mobile-nav-item" data-target="kb-section" id="nav-btn-kb-mob">
                 <i class="fa-solid fa-book-open"></i>
                 <span>知識庫</span>
+            </a>
+            <a href="#" class="mobile-nav-item" data-target="dashboard-section" id="nav-btn-dashboard-mob">
+                <i class="fa-solid fa-chart-pie"></i>
+                <span>儀表板</span>
             </a>
             <a href="#" class="mobile-nav-item" data-target="settings-section" id="nav-btn-settings-mob">
                 <i class="fa-solid fa-sliders"></i>
@@ -821,6 +941,79 @@
         </div>
     </div>
 
+    <!-- 8. 工作週報產生對話框 -->
+    <div class="modal-overlay modal-large" id="weekly-report-modal" style="z-index: 10650;">
+        <div class="modal" style="max-width: 700px; transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div class="modal-header" style="padding: 14px 20px;">
+                <h3><i class="fa-solid fa-file-invoice" style="color: var(--color-primary); margin-right: 8px;"></i>產生工作週報</h3>
+                <button class="modal-close" onclick="notes.closeWeeklyReportModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px; text-align: left;">
+                <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px;">
+                        <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">開始日期</label>
+                        <input type="date" id="report-start-date" style="padding: 6px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none; font-size: 0.85rem; height: auto;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px;">
+                        <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">結束日期</label>
+                        <input type="date" id="report-end-date" style="padding: 6px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none; font-size: 0.85rem; height: auto;">
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="notes.generateWeeklyReportRaw()" style="padding: 8px 16px; font-size: 0.85rem; height: auto; width: auto; font-weight: bold;">
+                        <i class="fa-solid fa-rotate"></i> 載入區間日誌
+                    </button>
+                    <button type="button" id="btn-weekly-api-summary" class="btn btn-primary" onclick="notes.generateWeeklyReportAI()" style="padding: 8px 16px; font-size: 0.85rem; height: auto; width: auto; font-weight: bold; display: none;">
+                        <i class="fa-solid fa-robot"></i> AI 智能整理週報
+                    </button>
+                </div>
+
+                <!-- 週報預覽編輯與 AI 運作狀態 -->
+                <div style="display: flex; flex-direction: column; gap: 6px; position: relative;">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; display: flex; justify-content: space-between;">
+                        <span>📝 週報 Markdown 內容 (可在此編輯修改)</span>
+                        <span id="ai-loading-indicator" style="display: none; color: var(--color-secondary); font-weight: bold; animation: pulse 1.5s infinite;"><i class="fa-solid fa-spinner fa-spin"></i> AI 整理中...</span>
+                    </label>
+                    <textarea id="weekly-report-output" rows="15" style="width: 100%; padding: 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); font-family: monospace; font-size: 0.85rem; line-height: 1.5; resize: vertical;" placeholder="請選擇日期區間並點選「載入區間日誌」或「AI 智能整理」..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="notes.closeWeeklyReportModal()">關閉</button>
+                <button type="button" class="btn btn-primary" onclick="notes.printWeeklyReport()" style="background: var(--color-primary); border-color: var(--color-primary);">
+                    <i class="fa-solid fa-file-pdf"></i> 列印 PDF / 預覽
+                </button>
+                <button type="button" class="btn btn-success" onclick="notes.copyWeeklyReportText()" style="background: var(--color-success); border-color: var(--color-success);">
+                    <i class="fa-solid fa-copy"></i> 複製內容
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9. 廠商名片拼圖分享對話框 -->
+    <div class="modal-overlay" id="vendor-share-modal" style="z-index: 10700;">
+        <div class="modal" style="max-width: 420px; transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div class="modal-header" style="padding: 14px 20px;">
+                <h3><i class="fa-solid fa-share-nodes" style="color: var(--color-primary); margin-right: 8px;"></i>名片分享拼圖</h3>
+                <button class="modal-close" onclick="vendors.closeShareModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px; align-items: center;">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; text-align: left; width: 100%;">
+                    系統已自動將該廠商的聯絡資訊與名片照片組合成一張精緻的分享拼圖：
+                </p>
+                <div id="vendor-share-canvas-container" style="width: 100%; border: 1px solid var(--panel-border); border-radius: var(--border-radius-sm); overflow: hidden; background: #000; box-shadow: var(--shadow-premium);">
+                    <!-- 動態名片預覽圖 -->
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; display: flex; gap: 10px; justify-content: flex-end; width: 100%;">
+                <button type="button" class="btn btn-secondary" onclick="vendors.closeShareModal()">關閉</button>
+                <button type="button" class="btn btn-primary" onclick="vendors.downloadShareCard()" style="background: var(--color-success); border-color: var(--color-success);">
+                    <i class="fa-solid fa-download"></i> 下載圖片
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 週報列印專用隱藏區域 -->
+    <div id="weekly-report-print-area" style="display: none;"></div>
+
     <!-- Toast Notifications Container -->
     <div class="toast-container" id="toast-container"></div>
 
@@ -832,6 +1025,7 @@
     <script src="js/notes.js"></script>
     <script src="js/vendors.js"></script>
     <script src="js/kb.js"></script>
+    <script src="js/dashboard.js"></script>
     <script src="js/app.js"></script>
     <script src="js/tests.js"></script>
 </body>
