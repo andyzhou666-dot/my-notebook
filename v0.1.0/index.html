@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>工作日誌與廠商管理系統</title>
+    <!-- 全域錯誤診斷工具 -->
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            alert("系統錯誤: " + message + "\n檔案: " + source + "\n行號: " + lineno);
+            return false;
+        };
+        window.addEventListener('error', function(e) {
+            if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+                const path = e.target.src || e.target.href;
+                alert("檔案載入失敗 (請檢查路徑): " + path);
+            }
+        }, true);
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Marked.js (Markdown parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Tesseract.js (OCR) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- Google Identity Services (GIS) & Google Client Library (gapi) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation (Desktop) -->
+        <aside class="sidebar" id="sidebar-nav">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fa-solid fa-brain-circuit"></i>
+                    <span>Antigravity</span>
+                </div>
+            </div>
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-target="notes-section" id="nav-btn-notes-pc">
+                    <i class="fa-solid fa-calendar-check"></i>
+                    <span>工作日誌</span>
+                </a>
+                <a href="#" class="nav-item" data-target="vendors-section" id="nav-btn-vendors-pc">
+                    <i class="fa-solid fa-address-book"></i>
+                    <span>廠商管理</span>
+                </a>
+                <a href="#" class="nav-item" data-target="kb-section" id="nav-btn-kb-pc">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>知識庫</span>
+                </a>
+                <a href="#" class="nav-item" data-target="settings-section" id="nav-btn-settings-pc">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>設定與同步</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 8px; padding: 16px 20px;">
+                <div class="sync-status-indicator" id="sidebar-sync-indicator" style="margin-bottom: 0;">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span id="sidebar-sync-text">未登入同步</span>
+                </div>
+                <button id="theme-toggle-btn" class="btn btn-secondary btn-sm" onclick="app.toggleTheme()" style="width: 100%; justify-content: center; padding: 6px; font-size: 0.75rem; display: flex; align-items: center; gap: 6px; height: auto;">
+                    <i class="fa-solid fa-sun"></i> <span id="theme-toggle-text">柔和淺色模式</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Mobile Header -->
+        <header class="mobile-header">
+            <div class="logo">
+                <i class="fa-solid fa-brain-circuit"></i>
+                <span>Antigravity</span>
+            </div>
+            <button class="mobile-settings-btn" id="mobile-settings-toggle" onclick="app.switchTab('settings-section')">
+                <i class="fa-solid fa-circle-user"></i>
+            </button>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- 1. Notes Section (工作日誌) -->
+            <section id="notes-section" class="tab-content active">
+                <div class="section-header">
+                    <h2>每日工作日誌</h2>
+                    <div class="header-actions" style="display: flex; gap: 8px;">
+                        <button id="export-logs-btn" onclick="notes.openExportModal()" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem; height: auto;">
+                            <i class="fa-solid fa-file-excel"></i> 匯出日誌 Excel
+                        </button>
+                        <button onclick="notes.resetFilter()" class="btn btn-secondary btn-sm" id="btn-reset-log-filter" style="display: none; padding: 4px 8px; font-size: 0.75rem; height: auto;">
+                            <i class="fa-solid fa-filter-circle-xmark"></i> 清除篩選
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 工作日誌統計看板 -->
+                <div class="log-stats-dashboard" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                    <div class="log-stat-card glass" id="stat-log-completion-card" style="cursor: default; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--border-radius-md); border: 1px solid var(--panel-border);">
+                        <div class="stat-icon" style="color: var(--color-primary); font-size: 1.5rem;"><i class="fa-solid fa-chart-line"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="stat-today-completion" style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">0%</div>
+                            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary);">今日完成率</div>
+                        </div>
+                    </div>
+                    <div class="log-stat-card glass" id="stat-log-todo-card" onclick="notes.setFilterStatus('todo')" style="cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--border-radius-md); border: 1px solid var(--panel-border); transition: var(--transition-smooth);">
+                        <div class="stat-icon" style="color: #38bdf8; font-size: 1.5rem;"><i class="fa-solid fa-spinner"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="stat-active-todo" style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">0</div>
+                            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary);">進行中工作</div>
+                        </div>
+                    </div>
+                    <div class="log-stat-card glass" id="stat-log-failed-card" onclick="notes.setFilterStatus('failed')" style="cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--border-radius-md); border: 1px solid var(--panel-border); transition: var(--transition-smooth);">
+                        <div class="stat-icon" style="color: #f87171; font-size: 1.5rem;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="stat-active-failed" style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">0</div>
+                            <div class="stat-label" style="font-size: 0.75rem; color: var(--text-secondary);">⚠️ 遇阻/卡關</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 今日日誌編輯器 -->
+                <div class="log-editor-panel glass" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 8px;">
+                        <span style="font-weight: 600; color: var(--text-primary); font-size: 0.95rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <i class="fa-solid fa-calendar-day" style="color: var(--color-primary);"></i>
+                            <input type="date" id="log-date-picker" style="background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); padding: 4px 8px; border-radius: var(--border-radius-sm); font-size: 0.85rem; font-family: inherit; font-weight: 600; width: auto; height: auto; outline: none; cursor: pointer;">
+                            <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: normal;">工作日誌</span>
+                        </span>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="notes.clearTodayLogDraft()" style="padding: 4px 8px; font-size: 0.75rem; height: auto; width: auto; min-height: 0;">清空草稿</button>
+                    </div>
+                    
+                    <!-- 事項輸入行 -->
+                    <div class="log-item-input-row" style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
+                        <input type="text" id="log-item-text" placeholder="輸入工作事項 (例如: 優化 Excel 匯出樣式 #專案A)..." style="flex: 4; min-width: 220px; font-size: 0.85rem; padding: 8px 12px;">
+                        <select id="log-item-status" onchange="notes.handleStatusChange(this.value)" style="flex: 1; min-width: 100px; font-size: 0.85rem; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                            <option value="todo">⏳ 進行中</option>
+                            <option value="success">✅ 已完成</option>
+                            <option value="failed">❌ 遇阻/未成功</option>
+                        </select>
+                        <button id="add-log-item-btn" onclick="notes.addLogItemDraft()" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; width: auto; height: auto;">
+                            <i class="fa-solid fa-plus"></i> 新增事項
+                        </button>
+                    </div>
+                    
+                    <!-- 卡關原因輸入框 (預設隱藏) -->
+                    <div id="log-item-fail-reason-row" style="display: none; width: 100%;">
+                        <input type="text" id="log-item-fail-reason" placeholder="請輸入遇阻/卡關原因 (例如: API伺服器異常中斷、測試設備損壞)..." style="font-size: 0.8rem; padding: 8px 12px; width: 100%; border: 1px solid rgba(248,113,113,0.4); background: rgba(248,113,113,0.05);">
+                    </div>
+                    
+                    <!-- 今日已新增事項預覽清單 -->
+                    <div id="log-draft-items-preview" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 2px;">
+                        <!-- 動態渲染事項草稿 -->
+                    </div>
+                    
+                    <!-- 心得與儲存按鈕 -->
+                    <div style="display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--panel-border); padding-top: 12px; flex-wrap: wrap;">
+                        <input type="text" id="log-day-notes" placeholder="今日工作心得或備註事項 (選填)..." style="flex: 4; min-width: 220px; font-size: 0.8rem; padding: 8px 12px;">
+                        <button id="save-log-btn" onclick="notes.saveTodayLog()" class="btn btn-primary" style="flex: 1; min-width: 120px; padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: var(--color-primary); width: auto; height: auto;">
+                            <i class="fa-solid fa-floppy-disk"></i> <span id="save-log-btn-text">儲存今日日誌</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 搜尋與標籤過濾 -->
+                <div class="search-filter-bar">
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="search-notes-input" placeholder="搜尋日誌內容、事項或專案標籤...">
+                    </div>
+                    <div class="tags-container" id="notes-tags-filter" style="flex: 1;">
+                        <!-- Dynamic Tags Filter -->
+                    </div>
+                </div>
+
+                <!-- 展開收合快速操作列 -->
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; margin-top: -6px; padding: 0 4px;">
+                    <button onclick="notes.expandAllLogs(true)" class="btn btn-secondary btn-sm" style="padding: 4px 10px; font-size: 0.72rem; height: auto; display: flex; align-items: center; gap: 6px; width: auto; min-height: 0;">
+                        <i class="fa-solid fa-angles-down"></i> 全部展開
+                    </button>
+                    <button onclick="notes.expandAllLogs(false)" class="btn btn-secondary btn-sm" style="padding: 4px 10px; font-size: 0.72rem; height: auto; display: flex; align-items: center; gap: 6px; width: auto; min-height: 0;">
+                        <i class="fa-solid fa-angles-up"></i> 全部收合
+                    </button>
+                </div>
+
+                <!-- 日誌時間軸 -->
+                <div id="notes-container" class="notes-timeline">
+                    <!-- Dynamic Work Logs -->
+                </div>
+            </section>
+
+            <!-- 2. Vendors Section -->
+            <section id="vendors-section" class="tab-content">
+                <div class="section-header">
+                    <h2>廠商管理</h2>
+                    <div class="header-actions">
+                        <button id="export-vendors-btn" class="btn btn-secondary">
+                            <i class="fa-solid fa-file-excel"></i> <span>匯出 Excel</span>
+                        </button>
+                        <div class="view-switch-group" style="display: inline-flex; background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md); padding: 2px;">
+                            <button id="vendor-view-card-btn" class="btn-view-switch active" title="卡片檢視" style="border: none; background: none; color: var(--text-primary); padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 0.9rem; width: auto; height: auto;"><i class="fa-solid fa-grip"></i></button>
+                            <button id="vendor-view-table-btn" class="btn-view-switch" title="條列檢視" style="border: none; background: none; color: var(--text-muted); padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 0.9rem; width: auto; height: auto;"><i class="fa-solid fa-list"></i></button>
+                        </div>
+                        <button id="scan-card-btn" class="btn btn-secondary">
+                            <i class="fa-solid fa-camera"></i> <span>掃描名片</span>
+                        </button>
+                        <button id="add-vendor-btn" class="btn btn-primary">
+                            <i class="fa-solid fa-plus"></i> <span>新增廠商</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="search-filter-bar">
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="search-vendors-input" placeholder="搜尋廠商、聯絡人、產品標籤...">
+                    </div>
+                    <div class="tags-container" id="vendors-tags-filter">
+                        <!-- Dynamic Tags Filter -->
+                    </div>
+                </div>
+
+                <!-- Vendors Grid -->
+                <div id="vendors-grid" class="vendors-grid">
+                    <!-- Dynamic Vendor Cards -->
+                </div>
+
+                <!-- Vendors Table View -->
+                <div id="vendors-table-container" class="vendors-table-wrapper" style="display: none; width: 100%; overflow-x: auto; margin-top: 20px;">
+                    <!-- Dynamic Vendor Table -->
+                </div>
+            </section>
+
+            <!-- 3. Knowledge Base Section -->
+            <section id="kb-section" class="tab-content">
+                <div class="kb-layout">
+                    <!-- KB Sidebar (Tree view) -->
+                    <div class="kb-sidebar">
+                        <div class="kb-sidebar-header">
+                            <h3>分類目錄</h3>
+                            <button id="add-category-btn" class="btn-icon" title="新增分類">
+                                <i class="fa-solid fa-folder-plus"></i>
+                            </button>
+                        </div>
+                        <div class="kb-tree" id="kb-category-tree">
+                            <!-- Dynamic Folders -->
+                        </div>
+                    </div>
+
+                    <!-- KB Content Area -->
+                    <div class="kb-content">
+                        <div class="kb-content-header" id="kb-content-header-area">
+                            <h3 id="current-category-title">未選擇分類</h3>
+                            <div class="kb-actions" style="display: flex; gap: 12px; align-items: center;">
+                                <div class="search-box" id="kb-search-container" style="display: none; min-width: 220px; margin-bottom: 0; padding: 6px 12px 6px 36px; border-radius: var(--border-radius-sm);">
+                                    <i class="fa-solid fa-magnifying-glass" style="left: 14px; font-size: 0.85rem; color: var(--text-muted);"></i>
+                                    <input type="text" id="search-kb-input" placeholder="搜尋此分類下的條目..." style="background: transparent; border: none; padding: 0; font-size: 0.85rem; height: auto; outline: none; width: 100%; color: var(--text-primary);">
+                                </div>
+                                <button id="add-kb-item-btn" class="btn btn-primary" style="display: none;">
+                                    <i class="fa-solid fa-plus"></i> 新增條目
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- KB Items List or Editor -->
+                        <div class="kb-main-view" id="kb-view-container">
+                            <div class="kb-empty-state" id="kb-empty-state">
+                                <i class="fa-solid fa-book-bookmark"></i>
+                                <p>請選擇左側的分類目錄以查看或新增知識條目。</p>
+                            </div>
+
+                            <div class="kb-list-view" id="kb-items-list" style="display: none;">
+                                <!-- Dynamic KB Cards -->
+                            </div>
+
+                            <div class="kb-detail-view" id="kb-item-detail" style="display: none;">
+                                <!-- Dynamic HTML View rendered by Marked.js -->
+                            </div>
+
+                            <div class="kb-editor-view" id="kb-item-editor" style="display: none; flex-direction: column; gap: 12px; height: 100%;">
+                                <!-- 頁籤切換：編輯 vs 預覽 -->
+                                <div class="editor-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--panel-border); margin-bottom: 8px; width: 100%;">
+                                    <button class="editor-tab-btn active" id="editor-edit-tab" onclick="kb.switchEditorTab('edit')" style="background: none; border: none; padding: 8px 16px; color: var(--text-primary); cursor: pointer; border-bottom: 2px solid var(--color-primary); font-weight: 600; font-size: 0.85rem; outline: none; transition: var(--transition-smooth);">編輯內容</button>
+                                    <button class="editor-tab-btn" id="editor-preview-tab" onclick="kb.switchEditorTab('preview')" style="background: none; border: none; padding: 8px 16px; color: var(--text-muted); cursor: pointer; font-size: 0.85rem; outline: none; transition: var(--transition-smooth);">即時預覽</button>
+                                </div>
+
+                                <div class="editor-header" style="display: flex; gap: 12px; width: 100%;">
+                                    <input type="text" id="kb-title-input" placeholder="輸入知識標題..." style="flex-grow: 2;">
+                                    <input type="text" id="kb-tags-input" placeholder="標籤 (以逗號分隔，例如: 安裝, 故障)" style="flex-grow: 1;">
+                                </div>
+                                
+                                <!-- 編輯容器 (工具列與輸入框) -->
+                                <div id="editor-edit-container" style="display: flex; flex-direction: column; flex-grow: 1; gap: 8px; width: 100%;">
+                                    <!-- 工具列 -->
+                                    <div class="editor-toolbar" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md); align-items: center;">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('bold')" title="粗體 (Ctrl+B)" style="padding: 4px 8px; font-weight: bold; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-bold"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('italic')" title="斜體 (Ctrl+I)" style="padding: 4px 8px; font-style: italic; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-italic"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('underline')" title="底線" style="padding: 4px 8px; text-decoration: underline; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-underline"></i></button>
+                                        
+                                        <div style="width: 1px; height: 16px; background: var(--panel-border); margin: 0 4px;"></div>
+                                        
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('h1')" title="大標題" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;">H1</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('h2')" title="中標題" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;">H2</button>
+                                        
+                                        <div style="width: 1px; height: 16px; background: var(--panel-border); margin: 0 4px;"></div>
+                                        
+                                        <!-- 文字顏色下拉選單 -->
+                                        <div class="dropdown-container" id="kb-color-dropdown-container" style="position: relative; display: inline-block;">
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="kb.toggleToolbarDropdown(event, 'kb-color-dropdown')" title="文字顏色" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                                                <i class="fa-solid fa-palette"></i> <i class="fa-solid fa-caret-down" style="font-size: 0.6rem;"></i>
+                                            </button>
+                                            <div class="dropdown-menu kb-toolbar-dropdown" id="kb-color-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--modal-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-sm); z-index: 100; padding: 4px; min-width: 120px; box-shadow: var(--shadow-premium); margin-top: 4px;">
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('color', '#ef4444');" style="display: block; padding: 6px 10px; color: #ef4444; font-size: 0.8rem; text-decoration: none; border-radius: 2px; font-weight: bold;">🔴 紅色</a>
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('color', '#3b82f6');" style="display: block; padding: 6px 10px; color: #3b82f6; font-size: 0.8rem; text-decoration: none; border-radius: 2px; font-weight: bold;">🔵 藍色</a>
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('color', '#10b981');" style="display: block; padding: 6px 10px; color: #10b981; font-size: 0.8rem; text-decoration: none; border-radius: 2px; font-weight: bold;">🟢 綠色</a>
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('color', '#f97316');" style="display: block; padding: 6px 10px; color: #f97316; font-size: 0.8rem; text-decoration: none; border-radius: 2px; font-weight: bold;">🟠 橘色</a>
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('color', '#8b5cf6');" style="display: block; padding: 6px 10px; color: #8b5cf6; font-size: 0.8rem; text-decoration: none; border-radius: 2px; font-weight: bold;">🟣 紫色</a>
+                                            </div>
+                                        </div>
+
+                                        <!-- 文字大小下拉選單 -->
+                                        <div class="dropdown-container" id="kb-size-dropdown-container" style="position: relative; display: inline-block;">
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="kb.toggleToolbarDropdown(event, 'kb-size-dropdown')" title="文字大小" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                                                <i class="fa-solid fa-text-height"></i> <i class="fa-solid fa-caret-down" style="font-size: 0.6rem;"></i>
+                                            </button>
+                                            <div class="dropdown-menu kb-toolbar-dropdown" id="kb-size-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: var(--modal-bg); border: 1px solid var(--panel-border); border-radius: var(--border-radius-sm); z-index: 100; padding: 4px; min-width: 120px; box-shadow: var(--shadow-premium); margin-top: 4px;">
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('size', '24px');" style="font-size: 1.1rem; display: block; padding: 6px 10px; color: var(--text-primary); text-decoration: none; border-radius: 2px;">超大 (24px)</a>
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('size', '20px');" style="font-size: 1rem; display: block; padding: 6px 10px; color: var(--text-primary); text-decoration: none; border-radius: 2px;">大 (20px)</a>
+                                                <a href="#" onclick="event.preventDefault(); kb.formatText('size', '14px');" style="font-size: 0.8rem; display: block; padding: 6px 10px; color: var(--text-primary); text-decoration: none; border-radius: 2px;">小 (14px)</a>
+                                            </div>
+                                        </div>
+
+                                        <div style="width: 1px; height: 16px; background: var(--panel-border); margin: 0 4px;"></div>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('ul')" title="無序列表" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-list-ul"></i></button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="kb.formatText('code')" title="程式碼區塊" style="padding: 4px 8px; width: auto; height: auto; min-height: 0; font-size: 0.8rem;"><i class="fa-solid fa-code"></i></button>
+                                    </div>
+
+                                    <div class="editor-body" style="flex-grow: 1; display: flex; flex-direction: column; height: 100%;">
+                                        <textarea id="kb-markdown-input" placeholder="撰寫您的知識庫內容 (支援 Markdown 與 HTML 語法)..." style="width: 100%; flex-grow: 1; height: 100%; min-height: 250px;"></textarea>
+                                    </div>
+                                </div>
+
+                                <!-- 預覽容器 (當選取預覽頁籤時顯示) -->
+                                <div id="editor-preview-container" class="markdown-body" style="display: none; flex-grow: 1; border: 1px solid var(--panel-border); padding: 16px; border-radius: var(--border-radius-md); background: rgba(255,255,255,0.01); overflow-y: auto; max-height: 500px; min-height: 250px; width: 100%; text-align: left;">
+                                    <!-- Live Markdown preview will render here -->
+                                </div>
+
+                                <div class="editor-footer" style="display: flex; gap: 12px; justify-content: flex-end; width: 100%;">
+                                    <button id="kb-cancel-edit-btn" class="btn btn-secondary">取消</button>
+                                    <button id="kb-save-btn" class="btn btn-primary">儲存</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Settings Section -->
+            <section id="settings-section" class="tab-content">
+                <div class="section-header">
+                    <h2>設定與同步</h2>
+                </div>
+
+                <div class="settings-container">
+                    <!-- Google Cloud Sync -->
+                    <div class="settings-card">
+                        <div class="card-icon"><i class="fa-brands fa-google-drive"></i></div>
+                        <div class="card-info">
+                            <h3>Google Drive 雲端同步</h3>
+                            <p>將您的所有筆記、廠商與知識庫資料自動備份至個人 Google Drive 專屬空間，讓公司、家裡與手機保持資料同步。</p>
+                            <div class="sync-controls">
+                                <div class="sync-account-info" id="sync-account-info">
+                                    <span class="status-badge status-disconnected" id="sync-status-badge">未連線</span>
+                                    <span id="sync-user-email">請登入 Google 帳號啟用同步</span>
+                                </div>
+                                <div class="btn-group">
+                                    <button id="google-login-btn" class="btn btn-primary">
+                                        <i class="fa-solid fa-arrow-right-to-bracket"></i> 登入 Google
+                                    </button>
+                                    <button id="google-logout-btn" class="btn btn-secondary" style="display: none;">
+                                        登出
+                                    </button>
+                                    <button id="sync-now-btn" class="btn btn-success" style="display: none;">
+                                        <i class="fa-solid fa-rotate"></i> 立即同步
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="settings-options" id="sync-options-area" style="display: none;">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="auto-sync-checkbox" checked>
+                                    <span class="switch-slider"></span>
+                                    <span class="switch-label">資料變更後自動同步 (延遲 5 秒上傳)</span>
+                                </label>
+                            </div>
+
+                            <!-- 自訂 Google Client ID 輸入欄位 -->
+                            <div class="form-group" style="margin-top: 15px; background: rgba(255,255,255,0.01); border: 1px solid var(--panel-border); padding: 12px; border-radius: var(--border-radius-md); text-align: left;">
+                                <label for="custom-client-id-input" style="font-weight: 600; margin-bottom: 6px; display: block; font-size: 0.85rem; color: var(--text-secondary);">
+                                    🔑 自訂 Google OAuth 用戶端 ID (Client ID)
+                                </label>
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="text" id="custom-client-id-input" placeholder="請在此輸入您的 Google Client ID..." style="flex-grow: 1; padding: 6px 12px; font-size: 0.85rem; height: auto; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                                    <button type="button" id="save-client-id-btn" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 550; width: auto; height: auto;">
+                                        儲存
+                                    </button>
+                                </div>
+                                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; margin-bottom: 0; line-height: 1.4;">
+                                    * 由於預設 Client ID 屬於測試開發帳戶，跨網域登入時會遇到 401 錯誤。請前往 Google Cloud Console 申請您的專屬 OAuth Client ID（需授權 JavaScript 來源為您的當前網址/網域，如 http://localhost:5000 或 GitHub 網址），貼上後儲存再點擊登入。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Local Backup -->
+                    <div class="settings-card">
+                        <div class="card-icon"><i class="fa-solid fa-database"></i></div>
+                        <div class="card-info">
+                            <h3>手動本地備份與還原</h3>
+                            <p>您也可以隨時將完整的資料庫匯出成單一的 JSON 檔案至本地保存，或是進行手動資料移轉。</p>
+                            <div class="btn-group">
+                                <button id="export-db-btn" class="btn btn-secondary">
+                                    <i class="fa-solid fa-file-export"></i> 匯出備份檔
+                                </button>
+                                <button id="import-db-btn" class="btn btn-secondary">
+                                    <i class="fa-solid fa-file-import"></i> 匯入備份檔
+                                </button>
+                                <input type="file" id="import-db-file" accept=".json" style="display: none;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- App Info -->
+                    <div class="settings-card">
+                        <div class="card-icon"><i class="fa-solid fa-circle-info"></i></div>
+                        <div class="card-info">
+                            <h3>系統資訊</h3>
+                            <p>版本: v0.1.0</p>
+                            <p>儲存媒介: 瀏覽器本地 IndexedDB</p>
+                            <p>開發者: Antigravity AI</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Mobile Navigation (Bottom Bar) -->
+        <nav class="mobile-nav">
+            <a href="#" class="mobile-nav-item active" data-target="notes-section" id="nav-btn-notes-mob">
+                <i class="fa-solid fa-note-sticky"></i>
+                <span>筆記</span>
+            </a>
+            <a href="#" class="mobile-nav-item" data-target="vendors-section" id="nav-btn-vendors-mob">
+                <i class="fa-solid fa-address-book"></i>
+                <span>廠商</span>
+            </a>
+            <a href="#" class="mobile-nav-item" data-target="kb-section" id="nav-btn-kb-mob">
+                <i class="fa-solid fa-book-open"></i>
+                <span>知識庫</span>
+            </a>
+            <a href="#" class="mobile-nav-item" data-target="settings-section" id="nav-btn-settings-mob">
+                <i class="fa-solid fa-sliders"></i>
+                <span>設定</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- 1. Vendor Edit Modal -->
+    <div class="modal-overlay" id="vendor-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="vendor-modal-title">新增廠商資料</h3>
+                <button class="modal-close" onclick="vendors.closeModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="vendor-form">
+                    <input type="hidden" id="vendor-id">
+                    <div class="form-group">
+                        <label for="vendor-company">公司名稱 <span class="required">*</span></label>
+                        <input type="text" id="vendor-company" required placeholder="例如：恆創精密工業股份有限公司">
+                    </div>
+                    <!-- 動態聯絡人管理區 -->
+                    <div class="form-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--panel-border); padding: 12px; border-radius: var(--border-radius-md);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label style="margin-bottom: 0; font-weight: 600;">聯絡人名單 (支援多位，主要聯絡人將作為代表)</label>
+                            <button type="button" class="btn btn-secondary" id="add-contact-row-btn" style="padding: 4px 10px; font-size: 0.8rem; height: auto; width: auto; font-weight: 550;">
+                                <i class="fa-solid fa-user-plus"></i> 新增聯絡人
+                            </button>
+                        </div>
+                        <div class="contacts-edit-list" id="contacts-edit-list" style="display: flex; flex-direction: column; gap: 10px;">
+                            <!-- 動態渲染聯絡人輸入行 -->
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="vendor-address">公司地址</label>
+                        <input type="text" id="vendor-address" placeholder="完整營業地址">
+                    </div>
+                    <div class="form-group">
+                        <label for="vendor-tags">經營項目 / 標籤</label>
+                        <input type="text" id="vendor-tags" placeholder="例如: 車床加工, 五金, 原料 (以逗號分隔)">
+                    </div>
+                    <div class="form-group">
+                        <label for="vendor-brands">代理原廠品牌 (Brands)</label>
+                        <input type="text" id="vendor-brands" placeholder="例如: Infineon, ADI, TI, ST, NXP (以逗號分隔，便於品牌搜尋)">
+                    </div>
+                    <div class="form-group">
+                        <label for="vendor-notes">詳細備註</label>
+                        <textarea id="vendor-notes" rows="3" placeholder="記錄配合狀況、報價紀錄或其他細節..."></textarea>
+                    </div>
+                    <!-- 拜訪紀錄管理區 -->
+                    <div class="form-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--panel-border); padding: 12px; border-radius: var(--border-radius-md); margin-top: 15px;">
+                        <label style="font-weight: 600; margin-bottom: 8px; display: block;">🕒 拜訪紀錄管理</label>
+                        
+                        <!-- 快速新增拜訪紀錄輸入列 -->
+                        <div class="visit-add-row" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: rgba(255,255,255,0.01); border: 1px solid var(--panel-border); padding: 10px; border-radius: var(--border-radius-md);">
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
+                                <input type="date" id="visit-input-date" style="flex: 1; min-width: 130px; padding: 6px 10px; font-size: 0.85rem; height: auto;">
+                                <input type="text" id="visit-input-purpose" placeholder="來訪事由 (例如: 產品Demo、討論規格...)" style="flex: 3; min-width: 200px; padding: 6px 10px; font-size: 0.85rem; height: auto;">
+                                <button type="button" class="btn btn-secondary" onclick="vendors.addVisitRecord()" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 550; width: auto; height: auto;">
+                                    <i class="fa-solid fa-plus"></i> 新增拜訪
+                                </button>
+                            </div>
+                            <!-- 多選來訪人 Checkboxes 容器 -->
+                            <div style="margin-top: 4px; width: 100%;">
+                                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; font-weight: bold;">請勾選此來訪時間點的所有同行聯絡人：</div>
+                                <div id="visit-contacts-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: var(--border-radius-sm); border: 1px solid var(--panel-border);">
+                                    <!-- 動態渲染聯絡人 checkbox -->
+                                </div>
+                                <!-- 其他來訪人手動輸入框，預設隱藏 -->
+                                <div id="visit-custom-contact-wrap" style="display: none; margin-top: 6px;">
+                                    <input type="text" id="visit-input-custom-contact" placeholder="請輸入其他來訪人姓名 (以逗號分隔)" style="padding: 6px 10px; font-size: 0.8rem; height: auto; width: 100%;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 歷史拜訪紀錄時間軸 -->
+                        <div class="visit-history-list" id="visit-history-list" style="max-height: 200px; overflow-y: auto; padding-right: 4px;">
+                            <!-- 動態渲染拜訪歷史時間軸 -->
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>名片與相關照片備份 (支援多張，可存背面或型錄)</label>
+                        <div class="vendor-images-manager">
+                            <!-- 縮圖網格 -->
+                            <div class="image-thumbnails-grid" id="vendor-thumbnails-grid" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px;">
+                                <!-- 動態渲染縮圖 -->
+                            </div>
+                            <!-- 新增照片按鈕 -->
+                            <div style="margin-top: 10px;">
+                                <button type="button" class="btn btn-secondary" id="add-more-photos-btn" style="padding: 6px 12px; font-size: 0.85rem;">
+                                    <i class="fa-solid fa-plus"></i> 新增照片 (背面/其他圖片)
+                                </button>
+                                <input type="file" id="add-more-photos-input" accept="image/*" multiple style="display: none;">
+                            </div>
+                            <!-- 大圖置中預覽區 -->
+                            <div class="active-image-preview-container" id="active-image-preview-container" style="display: none; margin-top: 12px;">
+                                <div class="card-image-preview-wrapper">
+                                    <img id="vendor-card-preview-img" src="" alt="照片預覽">
+                                    <button type="button" class="btn-delete-card" id="delete-card-photo-btn"><i class="fa-solid fa-trash"></i> 刪除此張</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="vendors.closeModal()">取消</button>
+                <button type="submit" form="vendor-form" class="btn btn-primary">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. OCR Name Card Scanner Modal -->
+    <div class="modal-overlay modal-large" id="scan-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>智慧名片掃描器</h3>
+                <button class="modal-close" id="close-scan-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body scan-layout">
+                <!-- Left panel: Scanner (Camera or File upload) -->
+                <div class="scan-input-area">
+                    <!-- 模式手動切換 Tab -->
+                    <div class="scan-mode-tabs">
+                        <button type="button" id="scan-tab-camera" class="scan-tab-btn active">
+                            <i class="fa-solid fa-camera"></i> 鏡頭拍照
+                        </button>
+                        <button type="button" id="scan-tab-upload" class="scan-tab-btn">
+                            <i class="fa-solid fa-file-image"></i> 上傳檔案
+                        </button>
+                    </div>
+
+                    <div class="camera-container" id="camera-view-container">
+                        <video id="camera-stream" autoplay playsinline></video>
+                        <canvas id="camera-canvas" style="display: none;"></canvas>
+                        <div class="camera-overlay">
+                            <div class="card-outline"></div>
+                        </div>
+                        <div class="camera-controls">
+                            <button id="toggle-camera-source-btn" class="btn-icon-circle" title="切換鏡頭">
+                                <i class="fa-solid fa-camera-rotate"></i>
+                            </button>
+                            <button id="capture-photo-btn" class="btn-capture" title="拍照">
+                                <i class="fa-solid fa-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="file-uploader" id="ocr-file-uploader" style="display: none;">
+                        <!-- 圖片預覽，預設隱藏 -->
+                        <img id="ocr-file-preview-img" src="" alt="名片預覽" style="display: none; max-width: 100%; max-height: 100%; object-fit: contain;">
+                        <!-- 預設提示文字 -->
+                        <div id="ocr-file-upload-prompt" style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
+                            <i class="fa-solid fa-cloud-arrow-up" style="font-size: 2.5rem; color: var(--text-muted);"></i>
+                            <p>將名片相片拖曳至此，或點擊上傳</p>
+                        </div>
+                        <input type="file" id="scan-file-input" accept="image/*" style="display: none;">
+                    </div>
+
+                    <!-- 影像二值化對比微調控制區 -->
+                    <div class="ocr-threshold-control" id="ocr-threshold-control" style="display: none; width: 100%; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: var(--border-radius-md);">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">
+                            <span>文字對比度微調 (黑白閥值)</span>
+                            <span id="threshold-value-display">自動 (128)</span>
+                        </div>
+                        <input type="range" id="ocr-threshold-slider" min="30" max="220" value="128" style="width: 100%; cursor: pointer; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; outline: none; margin-bottom: 8px;">
+                        <button type="button" id="re-recognize-btn" class="btn btn-secondary" style="width: 100%; padding: 6px 12px; font-size: 0.85rem; height: auto;">
+                            <i class="fa-solid fa-rotate"></i> 應用調整並重新辨識
+                        </button>
+                    </div>
+
+                    <div class="ocr-status-overlay" id="ocr-status-overlay" style="display: none;">
+                        <div class="spinner"></div>
+                        <p id="ocr-status-text">載入辨識引擎中...</p>
+                    </div>
+                </div>
+
+                <!-- Right panel: OCR parsed results -->
+                <div class="scan-results-area">
+                    <div class="alert-info-mini">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span>辨識完成後，點擊下方文字行可直接填入右側欄位。</span>
+                    </div>
+                    
+                    <div class="scan-fields-splitter">
+                        <!-- Captured Image and Raw Text list -->
+                        <div class="parsed-lines-column">
+                            <h4>1. 名片辨識文字行</h4>
+                            <div class="parsed-lines-list" id="ocr-parsed-lines-list">
+                                <div class="empty-text-tip">尚未取得辨識文字。請拍照或上傳圖片。</div>
+                            </div>
+                        </div>
+
+                        <!-- Target Form Fill -->
+                        <div class="form-fill-column">
+                            <h4>2. 填入廠商資料</h4>
+                            <div class="form-group">
+                                <label>公司名稱 <span class="required">*</span></label>
+                                <div class="input-with-select">
+                                    <input type="text" id="scan-fill-company" placeholder="點擊左邊文字，或在此輸入...">
+                                    <button class="btn-fill-target" data-field="company" title="將點選的文字填入此處"><i class="fa-solid fa-reply"></i></button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>聯絡人姓名</label>
+                                <div class="input-with-select">
+                                    <input type="text" id="scan-fill-contact" placeholder="點擊左邊文字，或在此輸入...">
+                                    <button class="btn-fill-target" data-field="contact" title="將點選的文字填入此處"><i class="fa-solid fa-reply"></i></button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>電話 / 手機</label>
+                                <div class="input-with-select">
+                                    <input type="text" id="scan-fill-phone" placeholder="已自動擷取或點擊填入...">
+                                    <button class="btn-fill-target" data-field="phone" title="將點選的文字填入此處"><i class="fa-solid fa-reply"></i></button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>電子信箱</label>
+                                <div class="input-with-select">
+                                    <input type="text" id="scan-fill-email" placeholder="已自動擷取或點擊填入...">
+                                    <button class="btn-fill-target" data-field="email" title="將點選的文字填入此處"><i class="fa-solid fa-reply"></i></button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>公司地址</label>
+                                <div class="input-with-select">
+                                    <input type="text" id="scan-fill-address" placeholder="點擊左邊文字，或在此輸入...">
+                                    <button class="btn-fill-target" data-field="address" title="將點選的文字填入此處"><i class="fa-solid fa-reply"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="scan-cancel-btn">取消</button>
+                <button class="btn btn-primary" id="scan-save-btn" disabled>確認匯入廠商</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Category Edit Modal -->
+    <div class="modal-overlay" id="category-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="category-modal-title">新增分類</h3>
+                <button class="modal-close" onclick="kb.closeCategoryModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="category-form">
+                    <input type="hidden" id="category-id">
+                    <div class="form-group">
+                        <label for="category-name">分類名稱 <span class="required">*</span></label>
+                        <input type="text" id="category-name" required placeholder="例如：車床技術、CNC代工">
+                    </div>
+                    <div class="form-group">
+                        <label for="category-parent">父分類 (選填)</label>
+                        <select id="category-parent">
+                            <option value="">(無 - 作為第一層大類)</option>
+                            <!-- Dynamic Categories -->
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="kb.closeCategoryModal()">取消</button>
+                <button type="submit" form="category-form" class="btn btn-primary">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. 全域客製化確認/警示對話框 (Custom Confirm/Alert) -->
+    <div class="modal-overlay" id="global-dialog-modal" style="z-index: 10000;">
+        <div class="modal" style="max-width: 400px; transform: scale(0.9); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div class="modal-header" style="padding: 14px 20px;">
+                <h3 id="global-dialog-title">系統提示</h3>
+                <button class="modal-close" id="global-dialog-close-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 20px; font-size: 0.95rem; text-align: center; color: var(--text-primary);" id="global-dialog-message">
+                確認執行此操作嗎？
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; justify-content: center; gap: 14px;">
+                <button type="button" class="btn btn-secondary" id="global-dialog-cancel-btn" style="padding: 8px 16px; font-size: 0.85rem; height: auto; width: auto;">取消</button>
+                <button type="button" class="btn btn-primary" id="global-dialog-confirm-btn" style="padding: 8px 16px; font-size: 0.85rem; height: auto; width: auto;">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. 全域圖片放大檢視對話框 (Custom Lightbox) -->
+    <div class="modal-overlay" id="global-lightbox-modal" style="z-index: 11000; background: rgba(0, 0, 0, 0.9);">
+        <button class="modal-close" id="btn-lightbox-close" style="position: absolute; top: 20px; right: 20px; font-size: 2rem; color: #ffffff; z-index: 11020; border: none; background: none; cursor: pointer; text-shadow: 0 2px 4px rgba(0,0,0,0.8);"><i class="fa-solid fa-xmark"></i></button>
+        
+        <!-- 左右切換按鈕 -->
+        <button class="lightbox-nav-btn prev" id="btn-lightbox-prev" style="position: absolute; left: 24px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); color: white; width: 50px; height: 50px; border-radius: 50%; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; z-index: 11010;">
+            <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <button class="lightbox-nav-btn next" id="btn-lightbox-next" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); color: white; width: 50px; height: 50px; border-radius: 50%; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; z-index: 11010;">
+            <i class="fa-solid fa-chevron-right"></i>
+        </button>
+
+        <!-- 圖片顯示容器 -->
+        <div class="lightbox-content" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;">
+            <img id="lightbox-img" src="" alt="放大相片照片" style="max-width: 90%; max-height: 90%; object-fit: contain; transform: scale(1) translate(0px, 0px); transition: transform 0.1s ease-out; cursor: zoom-in; user-select: none; -webkit-user-drag: none;">
+        </div>
+
+        <!-- 底部張數指示器 -->
+        <div id="lightbox-index-indicator" style="position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.7); font-size: 0.85rem; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); padding: 6px 16px; border-radius: 20px; z-index: 11010;">
+            1 / 1
+        </div>
+    </div>
+ 
+    <!-- 6. 快速檢視拜訪紀錄對話框 -->
+    <div class="modal-overlay" id="quick-visit-modal" style="z-index: 10500;">
+        <div class="modal" style="max-width: 500px; transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div class="modal-header" style="padding: 14px 20px;">
+                <h3>🕒 拜訪歷史紀錄</h3>
+                <button class="modal-close" onclick="vendors.closeQuickVisitModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;" id="quick-visit-company-name">-</div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 16px;" id="quick-visit-stats">共來訪 0 次</div>
+                
+                <div class="visit-history-list" id="quick-visit-timeline-container" style="max-height: 350px; overflow-y: auto; padding-right: 4px;">
+                    <!-- 動態渲染拜訪歷史 -->
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px;">
+                <button class="btn btn-secondary" onclick="vendors.closeQuickVisitModal()">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. 匯出日誌日期篩選對話框 -->
+    <div class="modal-overlay" id="export-logs-modal" style="z-index: 10600;">
+        <div class="modal" style="max-width: 400px; transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div class="modal-header" style="padding: 14px 20px;">
+                <h3><i class="fa-solid fa-file-excel" style="color: var(--color-primary); margin-right: 8px;"></i>匯出日誌篩選</h3>
+                <button class="modal-close" onclick="notes.closeExportModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; text-align: left;">請選擇要匯出的工作日誌日期區間：</p>
+                <div style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">開始日期</label>
+                    <input type="date" id="export-start-date" style="width: 100%; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px; text-align: left;">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">結束日期</label>
+                    <input type="date" id="export-end-date" style="width: 100%; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="notes.closeExportModal()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="notes.confirmExport()" style="background: var(--color-primary);">確認匯出</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Application Javascript Bundle -->
+    <!-- ExcelJS CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/sync.js"></script>
+    <script src="js/notes.js"></script>
+    <script src="js/vendors.js"></script>
+    <script src="js/kb.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/tests.js"></script>
+</body>
+</html>
