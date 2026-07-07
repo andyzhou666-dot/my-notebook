@@ -59,6 +59,10 @@
                     <i class="fa-solid fa-book-open"></i>
                     <span>知識庫</span>
                 </a>
+                <a href="#" class="nav-item" data-target="tools-section" id="nav-btn-tools-pc">
+                    <i class="fa-solid fa-toolbox"></i>
+                    <span>小工具</span>
+                </a>
                 <a href="#" class="nav-item" data-target="dashboard-section" id="nav-btn-dashboard-pc">
                     <i class="fa-solid fa-chart-pie"></i>
                     <span>工作儀表板</span>
@@ -392,6 +396,117 @@
                 </div>
             </section>
 
+            <!-- 3.5. Tools Section (常用小工具) -->
+            <section id="tools-section" class="tab-content">
+                <div class="section-header">
+                    <h2>常用小工具</h2>
+                </div>
+
+                <div class="tools-layout">
+                    <!-- Tools Sidebar -->
+                    <div class="tools-sidebar">
+                        <button class="tool-tab-btn active" data-tool="compress-tool">
+                            <i class="fa-solid fa-file-image"></i>
+                            <span>批次圖片壓縮</span>
+                        </button>
+                        <button class="tool-tab-btn" data-tool="text-tool">
+                            <i class="fa-solid fa-font"></i>
+                            <span>文字排版與清理</span>
+                        </button>
+                    </div>
+
+                    <!-- Tools Content Panel -->
+                    <div class="tools-content">
+                        <!-- Tool 1: Batch Image Compressor -->
+                        <div id="tool-compress-panel" class="tool-panel active">
+                            <div class="tool-intro">
+                                <h3>批次圖片壓縮工具</h3>
+                                <p>在瀏覽器本地端直接壓縮您的照片與圖片，絕不傳送到任何伺服器，安全且隱密。支援批次拖入處理與自訂尺寸/畫質縮小。</p>
+                            </div>
+
+                            <!-- Compressor Settings Panel -->
+                            <div class="compress-settings">
+                                <div class="setting-group">
+                                    <label>壓縮品質 (品質越低檔案越小)</label>
+                                    <div class="slider-container">
+                                        <input type="range" id="compress-quality" min="10" max="100" value="75">
+                                        <span id="compress-quality-val">75%</span>
+                                    </div>
+                                </div>
+                                <div class="setting-group">
+                                    <label>最大邊長限制 (防解析度過高，0 表示不調整)</label>
+                                    <select id="compress-max-dimension">
+                                        <option value="1920">縮小至 Full HD (1920px)</option>
+                                        <option value="1280">縮小至 HD (1280px)</option>
+                                        <option value="1024">縮小至行動版 (1024px)</option>
+                                        <option value="0">保留原始解析度 (僅壓縮畫質)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Drop Zone -->
+                            <div id="compress-dropzone" class="compress-dropzone">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                <div class="prompt-text">
+                                    <p class="main-prompt">拖曳多張圖片到這裡，或點擊選擇檔案</p>
+                                    <p class="sub-prompt">支援 JPG, PNG, WebP 格式圖片</p>
+                                </div>
+                                <input type="file" id="compress-file-input" accept="image/*" multiple style="display: none;">
+                            </div>
+
+                            <!-- Process Queue Dashboard -->
+                            <div id="compress-queue-section" style="display: none;">
+                                <div class="queue-header">
+                                    <h4>處理佇列 (<span id="compress-queue-count">0</span>)</h4>
+                                    <div class="queue-actions">
+                                        <button id="compress-clear-btn" class="btn btn-secondary btn-sm"><i class="fa-solid fa-trash-can"></i> 清除清單</button>
+                                        <button id="compress-download-all-btn" class="btn btn-primary btn-sm"><i class="fa-solid fa-download"></i> 下載全部</button>
+                                    </div>
+                                </div>
+                                <div class="compress-queue-list" id="compress-queue-list">
+                                    <!-- Queue items will be rendered dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tool 2: Text Cleaner & Format -->
+                        <div id="tool-text-panel" class="tool-panel">
+                            <div class="tool-intro">
+                                <h3>文字排版與全半形清理器</h3>
+                                <p>快速整理複製文字中的贅餘空白、格式、強制換行、全形符號與字元，幫助您乾淨地整理筆記或貼入工作日誌中。</p>
+                            </div>
+
+                            <div class="text-tool-grid">
+                                <!-- Input Area -->
+                                <div class="text-area-group">
+                                    <label>原始輸入文字</label>
+                                    <textarea id="text-tool-input" placeholder="請在此貼入或輸入需要整理的原始文字..."></textarea>
+                                </div>
+
+                                <!-- Output Area -->
+                                <div class="text-area-group">
+                                    <div class="textarea-header">
+                                        <label>整理後輸出結果</label>
+                                        <button id="text-tool-copy-btn" class="btn btn-secondary btn-sm"><i class="fa-solid fa-copy"></i> 複製結果</button>
+                                    </div>
+                                    <textarea id="text-tool-output" readonly placeholder="整理後的結果會自動呈現在這裡..."></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Formatting Control Action Buttons -->
+                            <div class="text-tool-actions">
+                                <button onclick="tools.cleanExtraNewlines()" class="btn btn-secondary"><i class="fa-solid fa-paragraph"></i> 清除贅餘空行</button>
+                                <button onclick="tools.convertFullToHalf()" class="btn btn-secondary"><i class="fa-solid fa-font"></i> 英數全形轉半形</button>
+                                <button onclick="tools.cleanSpaces()" class="btn btn-secondary"><i class="fa-solid fa-broom"></i> 清除多餘空格</button>
+                                <button onclick="tools.convertToMarkdownList()" class="btn btn-secondary"><i class="fa-solid fa-list-ul"></i> 轉為 MD 列表</button>
+                                <button onclick="tools.convertToSimplified()" class="btn btn-secondary"><i class="fa-solid fa-language"></i> 繁轉簡</button>
+                                <button onclick="tools.convertToTraditional()" class="btn btn-secondary"><i class="fa-solid fa-language"></i> 簡轉繁</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- 4. Settings Section -->
             <section id="settings-section" class="tab-content">
                 <div class="section-header">
@@ -578,6 +693,10 @@
                 <i class="fa-solid fa-book-open"></i>
                 <span>知識庫</span>
             </a>
+            <a href="#" class="mobile-nav-item" data-target="tools-section" id="nav-btn-tools-mob">
+                <i class="fa-solid fa-toolbox"></i>
+                <span>工具</span>
+            </a>
             <a href="#" class="mobile-nav-item" data-target="dashboard-section" id="nav-btn-dashboard-mob">
                 <i class="fa-solid fa-chart-pie"></i>
                 <span>儀表板</span>
@@ -722,6 +841,14 @@
                         <div class="camera-overlay">
                             <div class="card-outline"></div>
                         </div>
+
+                        <!-- 手機端專用：直接調用系統相機拍照上傳 -->
+                        <div class="mobile-camera-fallback" style="position: absolute; top: 12px; left: 12px; z-index: 10;">
+                            <button type="button" onclick="document.getElementById('scan-file-input').click()" class="btn btn-secondary btn-sm" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.15); padding: 6px 12px; font-size: 0.75rem; border-radius: 20px; display: flex; align-items: center; gap: 6px; box-shadow: var(--shadow-sm); width: auto; height: auto; color: var(--text-primary);">
+                                <i class="fa-solid fa-camera-retro" style="color: var(--color-secondary);"></i> 手機相機拍照 (推薦)
+                            </button>
+                        </div>
+
                         <div class="camera-controls">
                             <button id="toggle-camera-source-btn" class="btn-icon-circle" title="切換鏡頭">
                                 <i class="fa-solid fa-camera-rotate"></i>
@@ -1026,6 +1153,7 @@
     <script src="js/vendors.js"></script>
     <script src="js/kb.js"></script>
     <script src="js/dashboard.js"></script>
+    <script src="js/tools.js"></script>
     <script src="js/app.js"></script>
     <script src="js/tests.js"></script>
 </body>

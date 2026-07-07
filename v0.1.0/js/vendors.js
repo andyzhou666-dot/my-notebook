@@ -1718,13 +1718,21 @@ const vendors = (() => {
             return;
         }
 
-        // 渲染點選文字行按鈕
+        // 渲染點選文字行與快捷填入按鈕
         let linesHtml = '';
         lines.forEach((line, index) => {
+            const escapedLine = escapeJsString(line);
             linesHtml += `
-                <button type="button" class="ocr-line-btn" id="ocr-line-${index}" onclick="vendors.selectOcrLine('${escapeJsString(line)}', 'ocr-line-${index}')">
-                    ${escapeHtml(line)}
-                </button>
+                <div class="ocr-line-item-group" style="display: flex; flex-direction: column; gap: 4px; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: var(--border-radius-sm); margin-bottom: 8px;">
+                    <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 555; word-break: break-all;">${escapeHtml(line)}</div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                        <button type="button" class="btn btn-secondary" onclick="vendors.quickFillOcr(\`${escapedLine}\`, 'company')" style="padding: 2px 6px; font-size: 0.7rem; height: auto; width: auto; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; border-radius: 4px;">公司</button>
+                        <button type="button" class="btn btn-secondary" onclick="vendors.quickFillOcr(\`${escapedLine}\`, 'contact')" style="padding: 2px 6px; font-size: 0.7rem; height: auto; width: auto; background: rgba(20,184,166,0.15); border: 1px solid rgba(20,184,166,0.3); color: #99f6e4; border-radius: 4px;">姓名</button>
+                        <button type="button" class="btn btn-secondary" onclick="vendors.quickFillOcr(\`${escapedLine}\`, 'phone')" style="padding: 2px 6px; font-size: 0.7rem; height: auto; width: auto; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: #fde047; border-radius: 4px;">電話</button>
+                        <button type="button" class="btn btn-secondary" onclick="vendors.quickFillOcr(\`${escapedLine}\`, 'email')" style="padding: 2px 6px; font-size: 0.7rem; height: auto; width: auto; background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.3); color: #38bdf8; border-radius: 4px;">信箱</button>
+                        <button type="button" class="btn btn-secondary" onclick="vendors.quickFillOcr(\`${escapedLine}\`, 'address')" style="padding: 2px 6px; font-size: 0.7rem; height: auto; width: auto; background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); color: #c084fc; border-radius: 4px;">地址</button>
+                    </div>
+                </div>
             `;
         });
         linesListContainer.innerHTML = linesHtml;
@@ -1759,6 +1767,17 @@ const vendors = (() => {
 
         // 啟用「確認匯入」按鈕
         scanSaveBtn.disabled = false;
+    };
+
+    /**
+     * 點擊名片辨識文字列下方的快捷按鈕，直接將文字填入目標欄位
+     */
+    const quickFillOcr = (text, field) => {
+        const targetInput = document.getElementById(`scan-fill-${field}`);
+        if (targetInput) {
+            targetInput.value = text;
+            app.showToast(`已填入 ${field === 'company' ? '公司名稱' : field === 'contact' ? '聯絡人姓名' : field === 'phone' ? '電話/手機' : field === 'email' ? '電子信箱' : '公司地址'} 欄位`, 'success');
+        }
     };
 
     /**
@@ -2159,6 +2178,7 @@ const vendors = (() => {
         previewCardPhoto,
         setTagFilter,
         selectOcrLine,
+        quickFillOcr,
         setActivePreview,
         deleteThumbnail,
         updateContactField,

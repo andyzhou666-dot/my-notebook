@@ -67,6 +67,9 @@ const app = (() => {
             if (window.dashboard && typeof window.dashboard.init === 'function') {
                 await window.dashboard.init();
             }
+            if (window.tools && typeof window.tools.init === 'function') {
+                window.tools.init();
+            }
 
             // 3. 初始化 Google 同步服務
             setupSyncUI();

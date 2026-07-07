@@ -9,6 +9,7 @@ const tests = (() => {
         try {
             await testDatabase();
             testRegexParser();
+            testToolsModule();
             
             console.log('%c✔ 所有測試皆已通過！系統功能正常。', 'color: #10b981; font-weight: bold; font-size: 1.1rem;');
             app.showToast('✔ 系統自我測試全部通過！', 'success');
@@ -110,6 +111,64 @@ const tests = (() => {
             throw new Error(`地址解析錯誤，解析結果：${addressLine || '無'}`);
         }
         console.log(' -> 地址解析成功:', addressLine);
+    };
+
+    /**
+     * 3. 測試小工具 (Tools) 文字整理器功能
+     */
+    const testToolsModule = () => {
+        console.log('測試項 3：小工具 (Tools) 文字整理器演算法...');
+
+        if (!window.tools) {
+            throw new Error('Tools 模組未載入');
+        }
+
+        const inputEl = document.getElementById('text-tool-input');
+        const outputEl = document.getElementById('text-tool-output');
+        
+        if (!inputEl || !outputEl) {
+            console.log(' -> 跳過測試：小工具 DOM 元素不存在（需切換至該分頁或渲染後執行）');
+            return;
+        }
+
+        // 測試 1：贅餘換行清理
+        inputEl.value = '第一行\n\n\n\n第二行\n\n\n第三行';
+        window.tools.cleanExtraNewlines();
+        if (outputEl.value !== '第一行\n\n第二行\n\n第三行') {
+            throw new Error(`贅餘換行清理錯誤: [${outputEl.value}]`);
+        }
+        console.log(' -> 贅餘換行清理測試成功');
+
+        // 測試 2：全形轉半形
+        inputEl.value = 'ＡＢＣ１２３　＃';
+        window.tools.convertFullToHalf();
+        if (outputEl.value !== 'ABC123 #') {
+            throw new Error(`全形轉半形錯誤: [${outputEl.value}]`);
+        }
+        console.log(' -> 全形轉半形測試成功');
+
+        // 測試 3：空格清理
+        inputEl.value = '  hello   world  ';
+        window.tools.cleanSpaces();
+        if (outputEl.value !== 'hello world') {
+            throw new Error(`空格清理錯誤: [${outputEl.value}]`);
+        }
+        console.log(' -> 空格清理測試成功');
+
+        // 測試 4：繁簡轉換
+        inputEl.value = '专业东丝';
+        window.tools.convertToTraditional();
+        if (outputEl.value !== '專業東絲') {
+            throw new Error(`簡轉繁錯誤: [${outputEl.value}]`);
+        }
+        console.log(' -> 簡轉繁對照測試成功');
+
+        inputEl.value = '專業東絲';
+        window.tools.convertToSimplified();
+        if (outputEl.value !== '专业东丝') {
+            throw new Error(`繁轉簡錯誤: [${outputEl.value}]`);
+        }
+        console.log(' -> 繁轉簡對照測試成功');
     };
 
     return {
