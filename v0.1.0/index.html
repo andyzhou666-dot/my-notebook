@@ -752,37 +752,7 @@
                         <label for="vendor-notes">詳細備註</label>
                         <textarea id="vendor-notes" rows="3" placeholder="記錄配合狀況、報價紀錄或其他細節..."></textarea>
                     </div>
-                    <!-- 拜訪紀錄管理區 -->
-                    <div class="form-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--panel-border); padding: 12px; border-radius: var(--border-radius-md); margin-top: 15px;">
-                        <label style="font-weight: 600; margin-bottom: 8px; display: block;">🕒 拜訪紀錄管理</label>
-                        
-                        <!-- 快速新增拜訪紀錄輸入列 -->
-                        <div class="visit-add-row" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: rgba(255,255,255,0.01); border: 1px solid var(--panel-border); padding: 10px; border-radius: var(--border-radius-md);">
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
-                                <input type="date" id="visit-input-date" style="flex: 1; min-width: 130px; padding: 6px 10px; font-size: 0.85rem; height: auto;">
-                                <input type="text" id="visit-input-purpose" placeholder="來訪事由 (例如: 產品Demo、討論規格...)" style="flex: 3; min-width: 200px; padding: 6px 10px; font-size: 0.85rem; height: auto;">
-                                <button type="button" class="btn btn-secondary" onclick="vendors.addVisitRecord()" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 550; width: auto; height: auto;">
-                                    <i class="fa-solid fa-plus"></i> 新增拜訪
-                                </button>
-                            </div>
-                            <!-- 多選來訪人 Checkboxes 容器 -->
-                            <div style="margin-top: 4px; width: 100%;">
-                                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; font-weight: bold;">請勾選此來訪時間點的所有同行聯絡人：</div>
-                                <div id="visit-contacts-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: var(--border-radius-sm); border: 1px solid var(--panel-border);">
-                                    <!-- 動態渲染聯絡人 checkbox -->
-                                </div>
-                                <!-- 其他來訪人手動輸入框，預設隱藏 -->
-                                <div id="visit-custom-contact-wrap" style="display: none; margin-top: 6px;">
-                                    <input type="text" id="visit-input-custom-contact" placeholder="請輸入其他來訪人姓名 (以逗號分隔)" style="padding: 6px 10px; font-size: 0.8rem; height: auto; width: 100%;">
-                                </div>
-                            </div>
-                        </div>
 
-                        <!-- 歷史拜訪紀錄時間軸 -->
-                        <div class="visit-history-list" id="visit-history-list" style="max-height: 200px; overflow-y: auto; padding-right: 4px;">
-                            <!-- 動態渲染拜訪歷史時間軸 -->
-                        </div>
-                    </div>
                     <div class="form-group">
                         <label>名片與相關照片備份 (支援多張，可存背面或型錄)</label>
                         <div class="vendor-images-manager">
@@ -1022,19 +992,51 @@
         </div>
     </div>
  
-    <!-- 6. 快速檢視拜訪紀錄對話框 -->
+    <!-- 6. 快速檢視與管理拜訪紀錄對話框 -->
     <div class="modal-overlay" id="quick-visit-modal" style="z-index: 10500;">
-        <div class="modal" style="max-width: 500px; transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+        <div class="modal" style="max-width: 520px; transform: scale(0.95); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
             <div class="modal-header" style="padding: 14px 20px;">
-                <h3>🕒 拜訪歷史紀錄</h3>
+                <h3>🕒 拜訪紀錄管理</h3>
                 <button class="modal-close" onclick="vendors.closeQuickVisitModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="modal-body" style="padding: 20px;">
-                <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;" id="quick-visit-company-name">-</div>
-                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 16px;" id="quick-visit-stats">共來訪 0 次</div>
+            <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;" id="quick-visit-company-name">-</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);" id="quick-visit-stats">共來訪 0 次</div>
+                </div>
                 
-                <div class="visit-history-list" id="quick-visit-timeline-container" style="max-height: 350px; overflow-y: auto; padding-right: 4px;">
-                    <!-- 動態渲染拜訪歷史 -->
+                <!-- 新增拜訪紀錄表單 -->
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); padding: 12px; border-radius: var(--border-radius-md);">
+                    <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 10px;">➕ 新增本次拜訪紀錄</div>
+                    
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+                        <input type="date" id="quick-visit-input-date" style="flex: 1; min-width: 120px; padding: 6px 10px; font-size: 0.85rem; height: 32px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                        <input type="text" id="quick-visit-input-purpose" placeholder="來訪事由 (例如: 產品Demo、討論規格...)" style="flex: 2; min-width: 180px; padding: 6px 10px; font-size: 0.85rem; height: 32px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); outline: none;">
+                    </div>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 6px; font-weight: bold; text-align: left;">請勾選此來訪時間點的所有同行聯絡人：</div>
+                        <div id="quick-visit-contacts-checkboxes" style="display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 6px 10px; background: rgba(0,0,0,0.15); border-radius: var(--border-radius-sm); border: 1px solid var(--panel-border); max-height: 85px; overflow-y: auto; text-align: left;">
+                            <!-- 動態渲染聯絡人 checkbox -->
+                        </div>
+                        <!-- 其他來訪人手動輸入框 -->
+                        <div id="quick-visit-custom-contact-wrap" style="display: none; margin-top: 8px;">
+                            <input type="text" id="quick-visit-input-custom-contact" placeholder="請輸入其他來訪人姓名 (以逗號分隔)" style="padding: 6px 10px; font-size: 0.8rem; height: 32px; background: var(--bg-input); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: var(--border-radius-sm); width: 100%; outline: none;">
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: right;">
+                        <button type="button" class="btn btn-primary" onclick="vendors.addQuickVisitRecord()" style="padding: 6px 16px; font-size: 0.8rem; font-weight: 600; height: 32px; width: auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i class="fa-solid fa-plus"></i> 新增紀錄
+                        </button>
+                    </div>
+                </div>
+
+                <div style="text-align: left;">
+                    <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">📋 歷史拜訪軌跡</div>
+                    <div class="visit-history-list" id="quick-visit-timeline-container" style="max-height: 200px; overflow-y: auto; padding-right: 4px;">
+                        <!-- 動態渲染拜訪歷史 -->
+                    </div>
                 </div>
             </div>
             <div class="modal-footer" style="padding: 12px 20px;">

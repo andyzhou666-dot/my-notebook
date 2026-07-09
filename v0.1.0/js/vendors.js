@@ -23,7 +23,7 @@ const vendors = (() => {
     // 視角與多聯絡人狀態資料
     let currentViewState = 'card'; // 'card' 或 'table'
     let tempContacts = [];        // 暫存聯絡人資料
-    let tempVisits = [];          // 暫存拜訪紀錄資料
+    let currentQuickVisitVendorId = null; // 快速拜訪管理之廠商 ID
 
     const init = async () => {
         setupEvents();
@@ -42,15 +42,15 @@ const vendors = (() => {
             renderList();
         });
 
-        // 阻止拜訪紀錄輸入框按 Enter 鍵時提交整張廠商表單，改為自動觸發「新增拜訪」
-        const handleVisitEnter = (e) => {
+        // 阻止快速拜訪紀錄輸入框按 Enter 鍵時提交，改為自動觸發「新增紀錄」
+        const handleQuickVisitEnter = (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                addVisitRecord();
+                addQuickVisitRecord();
             }
         };
-        document.getElementById('visit-input-purpose').addEventListener('keydown', handleVisitEnter);
-        document.getElementById('visit-input-custom-contact').addEventListener('keydown', handleVisitEnter);
+        document.getElementById('quick-visit-input-purpose').addEventListener('keydown', handleQuickVisitEnter);
+        document.getElementById('quick-visit-input-custom-contact').addEventListener('keydown', handleQuickVisitEnter);
 
         // 廠商表單提交
         document.getElementById('vendor-form').addEventListener('submit', async (e) => {
@@ -542,17 +542,11 @@ const vendors = (() => {
         const modal = document.getElementById('vendor-modal');
         const form = document.getElementById('vendor-form');
         const title = document.getElementById('vendor-modal-title');
-        
         form.reset();
         tempCardImageBase64 = null;
         tempCardImages = [];
         activePreviewIndex = 0;
         tempContacts = [];
-        tempVisits = [];
-
-        // 初始化拜訪紀錄日期為今日，清空事由
-        document.getElementById('visit-input-date').value = new Date().toISOString().split('T')[0];
-        document.getElementById('visit-input-purpose').value = '';
 
         if (id) {
             title.textContent = '修改廠商資料';
@@ -580,9 +574,6 @@ const vendors = (() => {
                     }];
                 }
                 
-                // 載入拜訪紀錄
-                tempVisits = v.visits ? JSON.parse(JSON.stringify(v.visits)) : [];
-
                 // 相容多圖結構
                 if (v.cardImages && v.cardImages.length > 0) {
                     tempCardImages = [...v.cardImages];
@@ -609,14 +600,12 @@ const vendors = (() => {
                 email: '',
                 isPrimary: true
             }];
-            tempVisits = [];
             
             renderThumbnails();
             updateActivePreview();
         }
 
         renderContactInputs();
-        renderVisitInputsAndHistory();
         modal.classList.add('active');
     };
 
@@ -1045,7 +1034,6 @@ const vendors = (() => {
             tags,
             brands,
             contacts: tempContacts,
-            visits: tempVisits, // 寫入拜訪歷史
             notes: notesValue,
             cardImage: tempCardImages[0] || null,
             cardImages: tempCardImages,
@@ -1057,10 +1045,12 @@ const vendors = (() => {
                 vendorData.id = parseInt(id, 10);
                 const original = await db.getById('vendors', vendorData.id);
                 vendorData.createdAt = original.createdAt;
+                vendorData.visits = original.visits || []; // 編輯時保留原有的拜訪紀錄
                 await db.put('vendors', vendorData);
                 app.showToast('廠商資料已更新', 'success');
             } else {
                 vendorData.createdAt = Date.now();
+                vendorData.visits = []; // 新增廠商初始化拜訪紀錄為空陣列
                 await db.add('vendors', vendorData);
                 app.showToast('成功新增廠商', 'success');
             }
@@ -1073,9 +1063,6 @@ const vendors = (() => {
     };
 
     /**
-     * 同步拜訪管理區之聯絡人下拉選單
-     */
-    /**
      * 獲取去重後的拜訪次數 (以不同的日期作為一次拜訪)
      */
     const getUniqueVisitCount = (visits) => {
@@ -1085,98 +1072,139 @@ const vendors = (() => {
     };
 
     /**
-     * 渲染來訪紀錄多選 Checkboxes 清單
+     * 快速拜訪紀錄管理 - 渲染聯絡人勾選清單
      */
-    const renderVisitContactCheckboxes = () => {
-        const container = document.getElementById('visit-contacts-checkboxes');
+    const renderQuickVisitContactsCheckboxes = (v) => {
+        const container = document.getElementById('quick-visit-contacts-checkboxes');
         if (!container) return;
 
         let html = '';
-        tempContacts.forEach((c, idx) => {
-            if (c.name.trim()) {
-                html += `
-                    <label class="visit-chk-label">
-                        <input type="checkbox" name="visit-contact-check" value="${escapeHtml(c.name)}">
-                        <span>${escapeHtml(c.name)} ${c.title ? `<span style="opacity: 0.6; font-size:0.72rem;">(${escapeHtml(c.title)})</span>` : ''}</span>
-                    </label>
-                `;
-            }
-        });
+        if (v.contacts && v.contacts.length > 0) {
+            v.contacts.forEach((c) => {
+                if (c.name.trim()) {
+                    html += `
+                        <label class="visit-chk-label" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-primary); cursor: pointer; white-space: nowrap;">
+                            <input type="checkbox" name="quick-visit-contact-check" value="${escapeHtml(c.name)}" style="width: auto; height: auto; cursor: pointer; margin: 0;">
+                            <span>${escapeHtml(c.name)} ${c.title ? `<span style="opacity: 0.6; font-size:0.72rem;">(${escapeHtml(c.title)})</span>` : ''}</span>
+                        </label>
+                    `;
+                }
+            });
+        }
 
         // 加上「其他」checkbox
         html += `
-            <label class="visit-chk-label">
-                <input type="checkbox" id="visit-contact-check-custom" onchange="vendors.toggleCustomVisitContact(this.checked)">
+            <label class="visit-chk-label" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-primary); cursor: pointer; white-space: nowrap;">
+                <input type="checkbox" id="quick-visit-contact-check-custom" onchange="vendors.toggleQuickCustomContact(this.checked)" style="width: auto; height: auto; cursor: pointer; margin: 0;">
                 <span>其他人員</span>
             </label>
         `;
 
         container.innerHTML = html;
         
-        // 預設將「其他」手動輸入框隱藏並重置
-        const customWrap = document.getElementById('visit-custom-contact-wrap');
+        // 預設將「其他」手動輸入框隱藏與重置
+        const customWrap = document.getElementById('quick-visit-custom-contact-wrap');
         if (customWrap) customWrap.style.display = 'none';
-        const customInput = document.getElementById('visit-input-custom-contact');
+        const customInput = document.getElementById('quick-visit-input-custom-contact');
         if (customInput) customInput.value = '';
     };
 
     /**
      * 控制手動輸入其他人員輸入框之顯示隱藏
      */
-    const toggleCustomVisitContact = (checked) => {
-        const wrap = document.getElementById('visit-custom-contact-wrap');
+    const toggleQuickCustomContact = (checked) => {
+        const wrap = document.getElementById('quick-visit-custom-contact-wrap');
         if (wrap) {
             wrap.style.display = checked ? 'block' : 'none';
             if (checked) {
-                document.getElementById('visit-input-custom-contact').focus();
+                document.getElementById('quick-visit-input-custom-contact').focus();
             }
         }
     };
 
     /**
-     * 渲染編輯 Modal 內部的拜訪紀錄與輸入連動
+     * 主畫面免進入編輯 Modal 的拜訪歷史快速檢視與管理
      */
-    const renderVisitInputsAndHistory = () => {
-        renderVisitContactCheckboxes();
+    const showQuickVisitHistory = async (vendorId) => {
+        try {
+            currentQuickVisitVendorId = vendorId;
+            const v = await db.getById('vendors', vendorId);
+            if (!v) return;
 
-        const list = document.getElementById('visit-history-list');
-        if (!list) return;
+            document.getElementById('quick-visit-company-name').textContent = v.companyName;
+            
+            // 設定預設日期為今天
+            const dateInput = document.getElementById('quick-visit-input-date');
+            if (dateInput) {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                dateInput.value = `${yyyy}-${mm}-${dd}`;
+            }
 
-        if (tempVisits.length === 0) {
-            list.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); padding: 6px 0;">尚無拜訪紀錄</div>';
-            return;
+            // 清空來訪事由
+            const purposeInput = document.getElementById('quick-visit-input-purpose');
+            if (purposeInput) purposeInput.value = '';
+
+            // 渲染聯絡人與時間軸
+            renderQuickVisitContactsCheckboxes(v);
+            renderQuickVisitTimeline(v);
+
+            document.getElementById('quick-visit-modal').classList.add('active');
+        } catch (err) {
+            console.error(err);
+            app.showToast('讀取拜訪紀錄失敗', 'error');
         }
-
-        // 照來訪日期降序排序，若日期相同則照 ID 降序
-        tempVisits.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
-
-        let html = '<div class="visit-timeline">';
-        tempVisits.forEach(vt => {
-            html += `
-                <div class="visit-timeline-item">
-                    <div class="visit-timeline-header">
-                        <div class="visit-timeline-meta">
-                            <span class="visit-timeline-date">${escapeHtml(vt.date)}</span>
-                            <span>${escapeHtml(vt.contactName)}</span>
-                        </div>
-                        <button type="button" class="btn-delete-visit" onclick="vendors.deleteVisitRecord(${vt.id})" title="刪除此紀錄">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                    </div>
-                    <div class="visit-timeline-purpose">${escapeHtml(vt.purpose)}</div>
-                </div>
-            `;
-        });
-        html += '</div>';
-        list.innerHTML = html;
     };
 
     /**
-     * 新增拜訪紀錄到 tempVisits (勾選多名人員合併為單一拜訪事件)
+     * 渲染拜訪紀錄時間軸 (含刪除按鈕)
      */
-    const addVisitRecord = () => {
-        const dateInput = document.getElementById('visit-input-date');
-        const purposeInput = document.getElementById('visit-input-purpose');
+    const renderQuickVisitTimeline = (v) => {
+        const container = document.getElementById('quick-visit-timeline-container');
+        if (!container) return;
+
+        const visitsList = v.visits || [];
+        const uniqueCount = getUniqueVisitCount(visitsList);
+        document.getElementById('quick-visit-stats').textContent = `共來訪 ${uniqueCount} 次`;
+
+        if (visitsList.length === 0) {
+            container.innerHTML = '<div style="font-size:0.9rem; color:var(--text-muted); text-align:center; padding: 20px 0;">目前尚無來訪紀錄。</div>';
+        } else {
+            // 照日期降序
+            visitsList.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+            
+            let html = '<div class="visit-timeline" style="margin-left: 5px;">';
+            visitsList.forEach(vt => {
+                html += `
+                    <div class="visit-timeline-item" style="padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px dashed rgba(255,255,255,0.05); position: relative;">
+                        <div class="visit-timeline-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="visit-timeline-meta" style="font-weight:600; color:var(--text-primary);">
+                                <span class="visit-timeline-date" style="font-family:Consolas; color:var(--text-muted); margin-right:8px;">${escapeHtml(vt.date)}</span>
+                                <span>${escapeHtml(vt.contactName)}</span>
+                            </div>
+                            <button type="button" class="btn-delete-visit" onclick="vendors.deleteQuickVisitRecord(${vt.id})" title="刪除此紀錄" style="background: none; border: none; color: var(--color-danger); cursor: pointer; padding: 4px; font-size: 0.8rem; transition: transform 0.2s ease;">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                        <div class="visit-timeline-purpose" style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px; line-height:1.4;">${escapeHtml(vt.purpose)}</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+    };
+
+    /**
+     * 新增拜訪紀錄到資料庫並刷新
+     */
+    const addQuickVisitRecord = async () => {
+        if (!currentQuickVisitVendorId) return;
+
+        const dateInput = document.getElementById('quick-visit-input-date');
+        const purposeInput = document.getElementById('quick-visit-input-purpose');
 
         if (!dateInput || !purposeInput) return;
 
@@ -1190,15 +1218,15 @@ const vendors = (() => {
 
         // 收集勾選的聯絡人
         const checkedNames = [];
-        const checkboxes = document.querySelectorAll('input[name="visit-contact-check"]:checked');
+        const checkboxes = document.querySelectorAll('input[name="quick-visit-contact-check"]:checked');
         checkboxes.forEach(cb => {
             checkedNames.push(cb.value);
         });
 
         // 檢查是否勾選其他
-        const customChk = document.getElementById('visit-contact-check-custom');
+        const customChk = document.getElementById('quick-visit-contact-check-custom');
         if (customChk && customChk.checked) {
-            const customInput = document.getElementById('visit-input-custom-contact');
+            const customInput = document.getElementById('quick-visit-input-custom-contact');
             const customVal = customInput ? customInput.value.trim() : '';
             if (customVal) {
                 checkedNames.push(customVal);
@@ -1214,83 +1242,70 @@ const vendors = (() => {
 
         const contactName = checkedNames.join(', ');
 
-        tempVisits.push({
-            id: Date.now(),
-            date,
-            contactName,
-            purpose
-        });
-
-        // 重置事由、勾選與手動輸入框
-        purposeInput.value = '';
-        const allChecks = document.querySelectorAll('input[name="visit-contact-check"], #visit-contact-check-custom');
-        allChecks.forEach(cb => cb.checked = false);
-        
-        const customWrap = document.getElementById('visit-custom-contact-wrap');
-        if (customWrap) customWrap.style.display = 'none';
-        const customInput = document.getElementById('visit-input-custom-contact');
-        if (customInput) customInput.value = '';
-
-        renderVisitInputsAndHistory();
-        app.showToast('拜訪紀錄已暫存 (儲存廠商後才會寫入)', 'info');
-    };
-
-    /**
-     * 自暫存中刪除拜訪紀錄
-     */
-    const deleteVisitRecord = (id) => {
-        tempVisits = tempVisits.filter(v => v.id !== id);
-        renderVisitInputsAndHistory();
-    };
-
-    /**
-     * 主畫面免進入編輯 Modal 的拜訪歷史快速檢視
-     */
-    const showQuickVisitHistory = async (vendorId) => {
         try {
-            const v = await db.getById('vendors', vendorId);
+            const v = await db.getById('vendors', currentQuickVisitVendorId);
             if (!v) return;
 
-            document.getElementById('quick-visit-company-name').textContent = v.companyName;
+            if (!v.visits) v.visits = [];
+            v.visits.push({
+                id: Date.now(),
+                date,
+                contactName,
+                purpose
+            });
+
+            await db.put('vendors', v);
             
-            const visitsList = v.visits || [];
-            const uniqueCount = getUniqueVisitCount(visitsList);
-            document.getElementById('quick-visit-stats').textContent = `共來訪 ${uniqueCount} 次`;
+            // 重置事由、勾選與手動輸入框
+            purposeInput.value = '';
+            const allChecks = document.querySelectorAll('input[name="quick-visit-contact-check"], #quick-visit-contact-check-custom');
+            allChecks.forEach(cb => cb.checked = false);
+            
+            const customWrap = document.getElementById('quick-visit-custom-contact-wrap');
+            if (customWrap) customWrap.style.display = 'none';
+            const customInput = document.getElementById('quick-visit-input-custom-contact');
+            if (customInput) customInput.value = '';
 
-            const container = document.getElementById('quick-visit-timeline-container');
-            if (visitsList.length === 0) {
-                container.innerHTML = '<div style="font-size:0.9rem; color:var(--text-muted); text-align:center; padding: 20px 0;">目前尚無來訪紀錄。</div>';
-            } else {
-                // 照日期降序
-                visitsList.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
-                
-                let html = '<div class="visit-timeline" style="margin-left: 5px;">';
-                visitsList.forEach(vt => {
-                    html += `
-                        <div class="visit-timeline-item">
-                            <div class="visit-timeline-header">
-                                <div class="visit-timeline-meta" style="font-weight:600; color:var(--text-primary);">
-                                    <span class="visit-timeline-date" style="font-family:Consolas; color:var(--text-muted); margin-right:8px;">${escapeHtml(vt.date)}</span>
-                                    <span>${escapeHtml(vt.contactName)}</span>
-                                </div>
-                            </div>
-                            <div class="visit-timeline-purpose" style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px; line-height:1.4;">${escapeHtml(vt.purpose)}</div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                container.innerHTML = html;
-            }
-
-            document.getElementById('quick-visit-modal').classList.add('active');
+            // 重新整理 UI
+            renderQuickVisitContactsCheckboxes(v);
+            renderQuickVisitTimeline(v);
+            renderList(); // 更新主列表的小徽章次數
+            app.showToast('拜訪紀錄新增成功！', 'success');
         } catch (err) {
             console.error(err);
-            app.showToast('讀取拜訪紀錄失敗', 'error');
+            app.showToast('儲存拜訪紀錄失敗', 'error');
+        }
+    };
+
+    /**
+     * 從資料庫刪除拜訪紀錄並刷新
+     */
+    const deleteQuickVisitRecord = async (visitId) => {
+        if (!currentQuickVisitVendorId) return;
+
+        if (await app.confirm('確定要刪除這筆拜訪紀錄嗎？刪除後無法還原。')) {
+            try {
+                const v = await db.getById('vendors', currentQuickVisitVendorId);
+                if (!v) return;
+
+                v.visits = (v.visits || []).filter(vt => vt.id !== visitId);
+                await db.put('vendors', v);
+
+                // 重新整理 UI
+                renderQuickVisitContactsCheckboxes(v);
+                renderQuickVisitTimeline(v);
+                renderList(); // 更新主列表的小徽章次數
+                app.showToast('拜訪紀錄已刪除', 'success');
+            } catch (err) {
+                console.error(err);
+                app.showToast('刪除拜訪紀錄失敗', 'error');
+            }
         }
     };
 
     const closeQuickVisitModal = () => {
         document.getElementById('quick-visit-modal').classList.remove('active');
+        currentQuickVisitVendorId = null;
     };
 
 
@@ -2186,9 +2201,9 @@ const vendors = (() => {
         deleteContactRow,
         showQuickVisitHistory,
         closeQuickVisitModal,
-        addVisitRecord,
-        deleteVisitRecord,
-        toggleCustomVisitContact,
+        addQuickVisitRecord,
+        deleteQuickVisitRecord,
+        toggleQuickCustomContact,
         generateShareCard,
         closeShareModal,
         downloadShareCard

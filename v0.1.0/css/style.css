@@ -2006,18 +2006,33 @@ input:focus, select:focus, textarea:focus {
     }
 
     .camera-container {
-        height: 260px !important;
-        min-height: 260px !important;
+        height: 320px !important;
+        min-height: 320px !important;
+    }
+
+    .camera-controls {
+        background: rgba(9, 13, 22, 0.7) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        bottom: 0 !important;
+        padding: 8px 0 !important;
+        width: 100% !important;
+        left: 0 !important;
+        right: 0 !important;
+        gap: 30px !important;
     }
 
     .card-outline {
-        width: 270px !important;
-        height: 162px !important; /* 5:3 ratio */
+        width: 260px !important;
+        height: 156px !important; /* 5:3 ratio */
+        margin-top: -40px !important; /* 往上挪開，避免被底部控制列遮擋 */
     }
 
     .scan-results-area {
         width: 100% !important;
         padding: 16px !important;
+        height: auto !important;
+        overflow: visible !important;
     }
 
     .scan-fields-splitter {
@@ -2134,22 +2149,22 @@ input:focus, select:focus, textarea:focus {
 
 /* 聯絡人編輯行樣式 */
 .contact-edit-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--panel-border);
-    padding: 10px;
+    padding: 12px 14px;
     border-radius: var(--border-radius-md);
     position: relative;
 }
 
 .contact-edit-row input {
-    flex: 1;
-    min-width: 0; /* 防止 input 撐開 flex */
+    width: 100%;
+    min-width: 0;
     padding: 6px 10px !important;
     font-size: 0.85rem !important;
-    height: auto !important;
+    height: 32px !important;
 }
 
 .contact-edit-row .primary-checkbox-wrap {
@@ -2162,23 +2177,35 @@ input:focus, select:focus, textarea:focus {
     cursor: pointer;
 }
 
-.btn-delete-contact {
-    background: rgba(239, 68, 68, 0.15) !important;
-    color: var(--color-danger) !important;
-    border: 1px solid rgba(239, 68, 68, 0.3) !important;
-    width: 32px !important;
-    height: 32px !important;
-    border-radius: var(--border-radius-sm) !important;
+.contact-row-actions {
+    grid-column: span 2;
     display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--panel-border);
+}
+
+.btn-delete-contact {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
+    padding: 4px 10px !important;
+    font-size: 0.75rem !important;
+    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+    border-radius: var(--border-radius-sm);
     cursor: pointer;
-    transition: var(--transition-smooth);
-    padding: 0 !important;
+    transition: all 0.2s ease;
+    height: 28px !important;
+    width: auto !important;
 }
 
 .btn-delete-contact:hover {
-    background: var(--color-danger) !important;
+    background: #ef4444 !important;
     color: #ffffff !important;
 }
 
@@ -2205,14 +2232,12 @@ input:focus, select:focus, textarea:focus {
 /* 響應式微調 */
 @media (max-width: 768px) {
     .contact-edit-row {
-        flex-direction: column;
-        align-items: stretch;
+        grid-template-columns: 1fr;
         gap: 10px;
     }
     
-    .contact-edit-row .btn-delete-contact {
-        width: 100% !important;
-        margin-top: 4px;
+    .contact-row-actions {
+        grid-column: span 1 !important;
     }
 
     /* 廠商管理標頭行動端堆疊 */
